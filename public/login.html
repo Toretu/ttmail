@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Sign in – Mailings</title>
+<style>
+  body { font: 16px/1.5 system-ui, sans-serif; margin: 0; background: #f6f5fb; color: #222; display: grid; place-items: center; min-height: 100vh; }
+  .card { background: #fff; border-radius: 12px; padding: 32px; width: min(420px, 92vw); box-shadow: 0 2px 12px rgba(0,0,0,.1); }
+  h1 { margin: 0 0 6px; font-size: 22px; }
+  p { color: #555; }
+  a.button, button { display: block; width: 100%; box-sizing: border-box; text-align: center; font: inherit; font-weight: 600; padding: 10px 14px; border: 0; border-radius: 8px; cursor: pointer; text-decoration: none; margin-top: 12px; }
+  a.button { background: #5b3fd1; color: #fff; }
+  button.dev { background: #e4e0f7; color: #3a2a99; }
+  .disabled { background: #ddd !important; color: #777 !important; pointer-events: none; }
+  .error { color: #a11; font-weight: 600; } .hint { font-size: 13px; color: #666; }
+</style>
+</head>
+<body>
+<div class="card">
+  <h1>Mailings</h1>
+  <p>Sign in with your Microsoft 365 account.</p>
+  <a id="microsoft" class="button disabled" href="#">Sign in with Microsoft</a>
+  <p id="notConfigured" class="hint" hidden>Microsoft sign-in is not configured yet. See docs/office365-setup.md.</p>
+  <button id="dev" class="dev" hidden>Development login (local only)</button>
+  <p id="message" class="error"></p>
+</div>
+<script>
+const params = new URLSearchParams(location.search);
+const next = params.get('next') || '/app/';
+fetch('/api/auth/config').then((r) => r.json()).then(({ data }) => {
+  const link = document.getElementById('microsoft');
+  if (data.microsoft) {
+    link.classList.remove('disabled');
+    link.href = '/auth/login?next=' + encodeURIComponent(next);
+  } else {
+    document.getElementById('notConfigured').hidden = false;
+  }
+  document.getElementById('dev').hidden = !data.dev_login;
+}).catch(() => { document.getElementById('message').textContent = 'Could not reach the server.'; });
+
+document.getElementById('dev').addEventListener('click', async () => {
+  const res = await fetch('/auth/dev-login', { method: 'POST' });
+  if (res.ok) location.href = next.startsWith('/') && !next.startsWith('//') ? next : '/app/';
+  else document.getElementById('message').textContent = 'Development login is not available.';
+});
+</script>
+</body>
+</html>

@@ -1,0 +1,135 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Import – Mailings</title>
+<style>
+  body { font: 15px/1.5 system-ui, sans-serif; margin: 0; background: #f6f5fb; color: #222; }
+  main { max-width: 960px; margin: 0 auto; padding: 24px; }
+  h1 { margin-top: 0; }
+  .panel { background: #fff; border-radius: 10px; padding: 20px; box-shadow: 0 1px 4px rgba(0,0,0,.08); margin-bottom: 20px; }
+  label { display: block; margin: 8px 0 4px; font-weight: 600; }
+  select, input[type=file], button { font: inherit; padding: 8px 12px; }
+  button { border: 0; border-radius: 6px; background: #5b3fd1; color: #fff; cursor: pointer; }
+  button.secondary { background: #e4e0f7; color: #3a2a99; }
+  button:disabled { opacity: .5; cursor: not-allowed; }
+  .actions { margin-top: 14px; display: flex; gap: 10px; }
+  .summary { display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 12px; }
+  .chip { padding: 4px 12px; border-radius: 99px; background: #eee; font-weight: 600; }
+  .chip.new { background: #d9f4e1; } .chip.duplicate { background: #fff0c8; } .chip.invalid { background: #fbd9d9; }
+  table { width: 100%; border-collapse: collapse; }
+  th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid #eee; vertical-align: top; }
+  .error { color: #a11; font-weight: 600; } .ok { color: #176a34; font-weight: 600; }
+  .hint { color: #666; font-size: 13px; }
+  .topnav { background: #2b1d6b; padding: 10px 24px; display: flex; gap: 20px; }
+  .topnav a { color: #fff; text-decoration: none; font-weight: 600; }
+  .topnav a:hover { text-decoration: underline; }
+</style>
+</head>
+<body>
+<nav class="topnav"><a href="/app/">← Back to main screen</a><a href="/campaigns.html">Campaigns &amp; products</a><a href="/records.html">Companies &amp; contacts</a><a href="/import.html">Import</a><a href="/settings.html">Settings</a></nav>
+<main>
+  <h1>Import from CSV / Excel</h1>
+  <div class="panel">
+    <label for="kind">What are you importing?</label>
+    <select id="kind">
+      <option value="companies">Companies</option>
+      <option value="contacts">Contacts (companies must be imported first)</option>
+    </select>
+    <label for="file">File (.csv or .xlsx, max 2 MB, 2000 rows)</label>
+    <input id="file" type="file" accept=".csv,.xlsx">
+    <p class="hint" id="columns"></p>
+    <div class="actions">
+      <button id="preview" disabled>Preview</button>
+      <button id="commit" class="secondary" disabled>Import new rows</button>
+    </div>
+    <p id="message"></p>
+  </div>
+  <div class="panel" id="result" hidden>
+    <div class="summary" id="summary"></div>
+    <p class="hint" id="ignored"></p>
+    <table><thead><tr><th>Row</th><th>Status</th><th>Details</th></tr></thead><tbody id="rows"></tbody></table>
+  </div>
+</main>
+<script>
+const COLUMNS = {
+  companies: 'Required: name. Optional: org_number, billing_address, postal_code, city, country, website, category, status, notes. Norwegian headers such as Firmanavn, Orgnr, Poststed also work.',
+  contacts: 'Required: email, first and last name (or a single name column), and company (name) or org_number. Optional: job_title, phone, consent_status, notes.'
+};
+const $ = (id) => document.getElementById(id);
+let previewed = null;
+
+function refresh() {
+  $('columns').textContent = COLUMNS[$('kind').value];
+  $('preview').disabled = !$('file').files.length;
+  $('commit').disabled = true;
+  previewed = null;
+}
+
+async function send(mode) {
+  const body = new FormData();
+  body.append('file', $('file').files[0]);
+  const res = await fetch(`/api/${$('kind').value}/import?mode=${mode}`, { method: 'POST', body });
+  const json = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(json.error || json.message || `Request failed (${res.status})`);
+  return json.data;
+}
+
+function show(data) {
+  $('result').hidden = false;
+  const summary = $('summary');
+  summary.replaceChildren();
+  for (const key of ['total', 'new', 'duplicate', 'invalid', 'imported']) {
+    const chip = document.createElement('span');
+    chip.className = `chip ${key}`;
+    chip.textContent = `${key}: ${data.summary[key]}`;
+    summary.append(chip);
+  }
+  $('ignored').textContent = data.ignored_columns.length ? `Ignored columns: ${data.ignored_columns.join(', ')}` : '';
+  const tbody = $('rows');
+  tbody.replaceChildren();
+  for (const row of data.rows) {
+    const tr = tbody.insertRow();
+    tr.insertCell().textContent = row.row;
+    tr.insertCell().textContent = row.status;
+    const details = row.messages.join('; ') || (row.data ? Object.values(row.data).filter((v) => v !== null).join(' · ') : '');
+    tr.insertCell().textContent = details;
+  }
+  if (data.rows_truncated) $('ignored').textContent += ' Only the first 500 rows are listed.';
+}
+
+async function run(mode) {
+  const msg = $('message');
+  msg.className = '';
+  msg.textContent = 'Working…';
+  $('preview').disabled = $('commit').disabled = true;
+  try {
+    const data = await send(mode);
+    show(data);
+    if (mode === 'preview') {
+      previewed = data;
+      msg.textContent = 'Preview only – nothing has been saved.';
+      $('commit').disabled = data.summary.new === 0;
+    } else {
+      msg.className = 'ok';
+      msg.textContent = `Imported ${data.summary.imported} row(s).`;
+    }
+  } catch (e) {
+    msg.className = 'error';
+    msg.textContent = e.message;
+  }
+  $('preview').disabled = !$('file').files.length;
+}
+
+$('kind').addEventListener('change', refresh);
+$('file').addEventListener('change', refresh);
+$('preview').addEventListener('click', () => run('preview'));
+$('commit').addEventListener('click', () => {
+  if (previewed && confirm(`Import ${previewed.summary.new} new row(s)?`)) run('commit');
+});
+refresh();
+</script>
+<script src="/auth.js"></script>
+</body>
+</html>

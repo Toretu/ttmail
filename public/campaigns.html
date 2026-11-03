@@ -1,0 +1,233 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Campaigns – Mailings</title>
+<style>
+  body { font: 15px/1.5 system-ui, sans-serif; margin: 0; background: #f6f5fb; color: #222; }
+  main { max-width: 1040px; margin: 0 auto; padding: 24px; }
+  h1 { margin-top: 0; } h2 { margin: 0 0 10px; font-size: 18px; }
+  .panel { background: #fff; border-radius: 10px; padding: 20px; box-shadow: 0 1px 4px rgba(0,0,0,.08); margin-bottom: 20px; }
+  .row { display: flex; gap: 10px; flex-wrap: wrap; align-items: end; }
+  label { display: flex; flex-direction: column; font-weight: 600; font-size: 13px; gap: 3px; }
+  input, select, button { font: inherit; padding: 7px 10px; }
+  button { border: 0; border-radius: 6px; background: #5b3fd1; color: #fff; cursor: pointer; }
+  table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+  th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid #eee; }
+  td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
+  tfoot td { font-weight: 700; }
+  .error { color: #a11; font-weight: 600; } .hint { color: #666; font-size: 13px; }
+  .danger { border: 1px solid #e3b4b4; }
+  button.delete { background: #b42318; }
+  button:disabled { opacity: .5; cursor: not-allowed; }
+  .soldout { color: #a11; font-weight: 600; }
+  .topnav { background: #2b1d6b; padding: 10px 24px; display: flex; gap: 20px; }
+  .topnav a { color: #fff; text-decoration: none; font-weight: 600; }
+  .topnav a:hover { text-decoration: underline; }
+</style>
+</head>
+<body>
+<nav class="topnav"><a href="/app/">← Back to main screen</a><a href="/campaigns.html">Campaigns &amp; products</a><a href="/records.html">Companies &amp; contacts</a><a href="/import.html">Import</a><a href="/settings.html">Settings</a></nav>
+<main>
+  <h1>Campaigns, products and sales</h1>
+  <p id="message" class="error"></p>
+
+  <div class="panel">
+    <h2>Campaign</h2>
+    <div class="row">
+      <label>Choose <select id="campaign"></select></label>
+      <label>New campaign <input id="newCampaign" placeholder="e.g. Catalog 2027"></label>
+      <button id="addCampaign">Create</button>
+    </div>
+  </div>
+
+  <div id="detail" hidden>
+    <div class="panel">
+      <h2>Summary</h2>
+      <table>
+        <thead><tr><th>Product</th><th class="num">Price</th><th class="num">Available</th><th class="num">Reserved</th><th class="num">Sold</th><th class="num">Remaining</th><th class="num">Sold value</th></tr></thead>
+        <tbody id="summaryRows"></tbody>
+        <tfoot id="summaryTotal"></tfoot>
+      </table>
+    </div>
+
+    <div class="panel">
+      <h2>Add product</h2>
+      <div class="row">
+        <label>Name <input id="pName" placeholder="Full page"></label>
+        <label>Price (NOK) <input id="pPrice" size="8" inputmode="decimal"></label>
+        <label>Number available <input id="pQty" size="8" inputmode="numeric" placeholder="empty = unlimited"></label>
+        <button id="addProduct">Add product</button>
+      </div>
+    </div>
+
+    <div class="panel">
+      <h2>Register sale</h2>
+      <div class="row">
+        <label>Company <select id="sCompany"></select></label>
+        <label>Product <select id="sProduct"></select></label>
+        <label>Quantity <input id="sQty" size="4" value="1" inputmode="numeric"></label>
+        <label>Status <select id="sStatus"><option value="reserved">reserved</option><option value="sold">sold</option></select></label>
+        <button id="addSale">Save</button>
+      </div>
+      <p class="hint">Reserved and sold both count against the number available. Cancelled sales free the space again.</p>
+      <table>
+        <thead><tr><th>Company</th><th>Product</th><th class="num">Qty</th><th class="num">Unit price</th><th>Status</th></tr></thead>
+        <tbody id="saleRows"></tbody>
+      </table>
+    </div>
+    <div class="panel danger">
+      <h2>Delete campaign</h2>
+      <p class="hint">This permanently deletes the campaign, its products and all registered sales. Companies are not affected. Type the campaign name to confirm.</p>
+      <div class="row">
+        <label>Campaign name <input id="confirmName" size="30" autocomplete="off"></label>
+        <button id="deleteCampaign" class="delete" disabled>Delete campaign</button>
+      </div>
+    </div>
+  </div>
+</main>
+<script>
+const $ = (id) => document.getElementById(id);
+const money = (v) => Number(v).toLocaleString('nb-NO', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+let current = null;
+
+async function api(method, path, body) {
+  const res = await fetch('/api' + path, {
+    method,
+    headers: body ? { 'Content-Type': 'application/json' } : {},
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  const json = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    const details = json.details && Object.keys(json.details).length ? ': ' + Object.entries(json.details).map(([k, v]) => `${k} ${v}`).join(', ') : '';
+    throw new Error((json.error || `Request failed (${res.status})`) + details);
+  }
+  return json.data;
+}
+
+async function guarded(fn) {
+  $('message').textContent = '';
+  try { await fn(); } catch (e) { $('message').textContent = e.message; }
+}
+
+function option(select, value, label) {
+  const o = document.createElement('option');
+  o.value = value; o.textContent = label;
+  select.append(o);
+}
+
+function cell(tr, text, cls) {
+  const td = tr.insertCell();
+  td.textContent = text;
+  if (cls) td.className = cls;
+  return td;
+}
+
+async function loadCampaigns(selectId) {
+  const list = await api('GET', '/campaigns?limit=200');
+  const select = $('campaign');
+  select.replaceChildren();
+  option(select, '', list.length ? '— select —' : '— none yet —');
+  list.forEach((c) => { option(select, c.id, `${c.name} (${c.status})`); select.lastChild.dataset.name = c.name; });
+  const wanted = String(selectId || location.hash.slice(1) || localStorage.getItem('campaign') || '');
+  if (list.some((c) => String(c.id) === wanted)) select.value = wanted;
+  await loadDetail();
+}
+
+async function loadDetail() {
+  current = $('campaign').value || null;
+  $('confirmName').value = '';
+  $('deleteCampaign').disabled = true;
+  if (current) { localStorage.setItem('campaign', current); history.replaceState(null, '', '#' + current); }
+  $('detail').hidden = !current;
+  if (!current) return;
+
+  const [summary, sales, companies] = await Promise.all([
+    api('GET', `/campaigns/${current}/summary`),
+    api('GET', `/campaigns/${current}/sales`),
+    api('GET', '/companies?limit=200'),
+  ]);
+
+  const rows = $('summaryRows');
+  rows.replaceChildren();
+  const products = $('sProduct');
+  products.replaceChildren();
+  for (const p of summary.products) {
+    const tr = rows.insertRow();
+    cell(tr, p.name);
+    cell(tr, money(p.price), 'num');
+    cell(tr, p.capacity === null ? 'unlimited' : p.capacity, 'num');
+    cell(tr, p.reserved, 'num');
+    cell(tr, p.sold, 'num');
+    cell(tr, p.remaining === null ? '∞' : p.remaining, p.remaining === 0 ? 'num soldout' : 'num');
+    cell(tr, money(p.revenue_sold), 'num');
+    option(products, p.id, `${p.name} (${money(p.price)})`);
+  }
+  const t = summary.totals;
+  const foot = $('summaryTotal');
+  foot.replaceChildren();
+  const tr = foot.insertRow();
+  cell(tr, 'Total'); cell(tr, ''); cell(tr, ''); cell(tr, t.reserved, 'num'); cell(tr, t.sold, 'num'); cell(tr, ''); cell(tr, money(t.revenue_sold), 'num');
+
+  const companySelect = $('sCompany');
+  companySelect.replaceChildren();
+  companies.forEach((c) => option(companySelect, c.id, c.name));
+
+  const body = $('saleRows');
+  body.replaceChildren();
+  for (const s of sales) {
+    const row = body.insertRow();
+    cell(row, s.company_name);
+    cell(row, s.product_name);
+    cell(row, s.quantity, 'num');
+    cell(row, money(s.unit_price), 'num');
+    const select = document.createElement('select');
+    ['reserved', 'sold', 'cancelled'].forEach((v) => option(select, v, v));
+    select.value = s.status;
+    select.addEventListener('change', () => guarded(async () => {
+      try { await api('PUT', `/sales/${s.id}`, { status: select.value }); } finally { await loadDetail(); }
+    }));
+    row.insertCell().append(select);
+  }
+}
+
+$('campaign').addEventListener('change', () => guarded(loadDetail));
+function currentName() {
+  const option = $('campaign').selectedOptions[0];
+  return option ? option.dataset.name : '';
+}
+$('confirmName').addEventListener('input', () => { $('deleteCampaign').disabled = !current || $('confirmName').value.trim() !== currentName(); });
+$('deleteCampaign').addEventListener('click', () => guarded(async () => {
+  await api('DELETE', `/campaigns/${current}`, { confirm_name: $('confirmName').value });
+  localStorage.removeItem('campaign');
+  history.replaceState(null, '', location.pathname);
+  $('confirmName').value = '';
+  $('deleteCampaign').disabled = true;
+  await loadCampaigns();
+}));
+$('addCampaign').addEventListener('click', () => guarded(async () => {
+  const created = await api('POST', '/campaigns', { name: $('newCampaign').value, status: 'active' });
+  $('newCampaign').value = '';
+  await loadCampaigns(created.id);
+}));
+$('addProduct').addEventListener('click', () => guarded(async () => {
+  await api('POST', `/campaigns/${current}/products`, { name: $('pName').value, price: $('pPrice').value, quantity_available: $('pQty').value });
+  ['pName', 'pPrice', 'pQty'].forEach((id) => { $(id).value = ''; });
+  await loadDetail();
+}));
+$('addSale').addEventListener('click', () => guarded(async () => {
+  await api('POST', `/campaigns/${current}/sales`, {
+    product_id: Number($('sProduct').value),
+    company_id: Number($('sCompany').value),
+    quantity: Number($('sQty').value),
+    status: $('sStatus').value,
+  });
+  await loadDetail();
+}));
+
+guarded(() => loadCampaigns());
+</script>
+<script src="/auth.js"></script>
+</body>
+</html>

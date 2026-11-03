@@ -1,0 +1,276 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Settings – Mailings</title>
+<style>
+  body { font: 15px/1.5 system-ui, sans-serif; margin: 0; background: #f6f5fb; color: #222; }
+  .topnav { background: #2b1d6b; padding: 10px 24px; display: flex; gap: 20px; flex-wrap: wrap; }
+  .topnav a { color: #fff; text-decoration: none; font-weight: 600; }
+  .topnav a:hover { text-decoration: underline; }
+  main { max-width: 960px; margin: 0 auto; padding: 24px; }
+  h1 { margin-top: 0; } h2 { margin: 0 0 10px; font-size: 18px; }
+  .panel { background: #fff; border-radius: 10px; padding: 20px; box-shadow: 0 1px 4px rgba(0,0,0,.08); margin-bottom: 20px; }
+  .row { display: flex; gap: 10px; flex-wrap: wrap; align-items: end; }
+  label { display: flex; flex-direction: column; font-weight: 600; font-size: 13px; gap: 3px; }
+  input, select, button { font: inherit; padding: 7px 10px; }
+  button { border: 0; border-radius: 6px; background: #5b3fd1; color: #fff; cursor: pointer; }
+  button.secondary { background: #e4e0f7; color: #3a2a99; }
+  button.small { padding: 3px 10px; font-size: 13px; }
+  button:disabled { opacity: .5; cursor: not-allowed; }
+  table { width: 100%; border-collapse: collapse; margin-top: 8px; }
+  th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid #eee; vertical-align: top; }
+  code { background: #f0eefb; padding: 1px 5px; border-radius: 4px; }
+  .badge { padding: 2px 10px; border-radius: 99px; font-weight: 600; font-size: 13px; }
+  .good { background: #d9f4e1; color: #176a34; } .bad { background: #fbd9d9; color: #a11; } .warn { background: #fff0c8; color: #7a5a00; }
+  .error { color: #a11; font-weight: 600; } .hint { color: #666; font-size: 13px; }
+  details { margin-top: 8px; } summary { cursor: pointer; font-weight: 600; }
+  ol li { margin-bottom: 6px; }
+</style>
+</head>
+<body>
+<nav class="topnav"><a href="/app/">← Back to main screen</a><a href="/records.html">Companies &amp; contacts</a><a href="/campaigns.html">Campaigns &amp; products</a><a href="/import.html">Import</a><a href="/settings.html">Settings</a></nav>
+<main>
+  <h1>Settings</h1>
+  <p id="message" class="error"></p>
+
+  <div class="panel">
+    <h2>Users</h2>
+    <p class="hint">Only people listed here can sign in (with the Microsoft 365 address they sign in with). <strong>viewer</strong> can read, <strong>editor</strong> can also add, change, import and delete data, <strong>admin</strong> can also change settings and users. You cannot change your own role.</p>
+    <table>
+      <thead><tr><th>Email</th><th>Name</th><th>Role</th><th>Active</th><th>Last sign-in</th></tr></thead>
+      <tbody id="users"></tbody>
+    </table>
+    <div class="row" style="margin-top:14px">
+      <label>Email <input id="uEmail" size="30" placeholder="name@paradisskolekorps.no"></label>
+      <label>Name <input id="uName" size="20"></label>
+      <label>Role <select id="uRole"><option>viewer</option><option selected>editor</option><option>admin</option></select></label>
+      <button id="addUser">Add user</button>
+    </div>
+  </div>
+
+  <div class="panel">
+    <h2>Office 365 connection (Microsoft Graph)</h2>
+    <p class="hint">These values are set on the server in the <code>.env</code> file (or the server's protected environment), never in this page. The client secret is never shown or stored in the database.</p>
+    <table>
+      <tbody>
+        <tr><th>Tenant ID</th><td id="tenant"></td><td><code>GRAPH_TENANT_ID</code></td></tr>
+        <tr><th>Client ID</th><td id="client"></td><td><code>GRAPH_CLIENT_ID</code></td></tr>
+        <tr><th>Client secret</th><td id="secret"></td><td><code>GRAPH_CLIENT_SECRET</code></td></tr>
+      </tbody>
+    </table>
+    <div class="row" style="margin-top:14px">
+      <button id="test">Test connection</button>
+      <span class="hint">Checks sign-in, granted permissions, and read access to each active mailbox. Sends no email.</span>
+    </div>
+    <div id="testResult" hidden>
+      <table>
+        <tbody>
+          <tr><th>Sign-in to Microsoft</th><td id="rToken"></td></tr>
+          <tr><th>Permission Mail.Send</th><td id="rSend"></td></tr>
+          <tr><th>Permission Mail.Read / Mail.ReadWrite</th><td id="rRead"></td></tr>
+        </tbody>
+      </table>
+      <table>
+        <thead><tr><th>Mailbox</th><th>Result</th></tr></thead>
+        <tbody id="rMailboxes"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="panel">
+    <h2>Mailboxes the application may use</h2>
+    <p class="hint">Only addresses listed here and active are used. The Microsoft side must also be restricted to the same mailboxes (see the setup steps below).</p>
+    <table>
+      <thead><tr><th>Name</th><th>Email</th><th>Active</th></tr></thead>
+      <tbody id="mailboxes"></tbody>
+    </table>
+    <div class="row" style="margin-top:14px">
+      <label>Name <input id="mbName" placeholder="Sales"></label>
+      <label>Email <input id="mbEmail" size="32" placeholder="salg@paradisskolekorps.no"></label>
+      <button id="addMailbox">Add mailbox</button>
+    </div>
+  </div>
+
+  <div class="panel">
+    <h2>How to set it up on the Microsoft side</h2>
+    <p>Short version below; full details and troubleshooting are in <code>docs/office365-setup.md</code>. You need a Microsoft 365 / Entra administrator account.</p>
+    <details open>
+      <summary>1. Register the application</summary>
+      <ol>
+        <li>Go to <a href="https://entra.microsoft.com" target="_blank" rel="noopener">entra.microsoft.com</a> → Identity → Applications → App registrations → New registration.</li>
+        <li>Name: <code>Mailings</code>. Supported account types: <em>Single tenant</em>. No redirect URI. Register.</li>
+        <li>On the Overview page copy <strong>Directory (tenant) ID</strong> and <strong>Application (client) ID</strong> into <code>.env</code>.</li>
+      </ol>
+    </details>
+    <details>
+      <summary>2. Give it mail permissions</summary>
+      <ol>
+        <li>API permissions → Add a permission → Microsoft Graph → <strong>Application permissions</strong>.</li>
+        <li>Add <code>Mail.Send</code> and <code>Mail.ReadWrite</code> (use <code>Mail.Read</code> instead if replies should only be read).</li>
+        <li>Click <strong>Grant admin consent</strong> for your organisation. Both rows must show a green check.</li>
+      </ol>
+    </details>
+    <details>
+      <summary>3. Create a client secret</summary>
+      <ol>
+        <li>Certificates &amp; secrets → New client secret → pick an expiry (e.g. 12 months).</li>
+        <li>Copy the <strong>Value</strong> immediately (it is shown only once) into <code>GRAPH_CLIENT_SECRET</code> in <code>.env</code>. Put a reminder in your calendar before it expires.</li>
+      </ol>
+    </details>
+    <details>
+      <summary>4. Restrict the app to the two mailboxes (important)</summary>
+      <p>Application permissions normally reach <em>every</em> mailbox in the organisation. Limit them in Exchange Online PowerShell:</p>
+      <ol>
+        <li>Create a mail-enabled security group (e.g. <code>mailings-allowed@paradisskolekorps.no</code>) containing only the approved mailboxes.</li>
+        <li><code>New-ApplicationAccessPolicy -AppId &lt;client id&gt; -PolicyScopeGroupId mailings-allowed@paradisskolekorps.no -AccessRight RestrictAccess -Description "Mailings app"</code></li>
+        <li><code>Test-ApplicationAccessPolicy -Identity programm@paradisskolekorps.no -AppId &lt;client id&gt;</code> should say <em>Granted</em>; a mailbox outside the group should say <em>Denied</em>.</li>
+        <li>The policy can take up to an hour to take effect.</li>
+      </ol>
+    </details>
+    <details>
+      <summary>5. Apply and test</summary>
+      <ol>
+        <li>Save <code>.env</code>, then on the server run <code>docker compose up -d</code> (local) or restart the web service so the values are loaded.</li>
+        <li>Reload this page and press <strong>Test connection</strong>.</li>
+      </ol>
+    </details>
+  </div>
+</main>
+<script>
+const $ = (id) => document.getElementById(id);
+
+async function api(method, path, body) {
+  const res = await fetch('/api' + path, {
+    method,
+    headers: body ? { 'Content-Type': 'application/json' } : {},
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  const json = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    const details = json.details && Object.keys(json.details).length ? ': ' + Object.entries(json.details).map(([k, v]) => `${k} ${v}`).join(', ') : '';
+    throw new Error((json.error || `Request failed (${res.status})`) + details);
+  }
+  return json.data;
+}
+
+async function guarded(fn) {
+  $('message').textContent = '';
+  try { await fn(); } catch (e) { $('message').textContent = e.message; }
+}
+
+function badge(target, ok, goodText, badText, extra) {
+  target.replaceChildren();
+  const b = document.createElement('span');
+  b.className = 'badge ' + (ok ? 'good' : 'bad');
+  b.textContent = ok ? goodText : badText;
+  target.append(b);
+  if (extra) target.append(' ' + extra);
+}
+
+async function loadStatus() {
+  const s = await api('GET', '/settings/graph');
+  $('tenant').textContent = s.tenant_id || 'not set';
+  $('client').textContent = s.client_id || 'not set';
+  badge($('secret'), s.secret_configured, 'configured', 'not set');
+  $('test').disabled = !s.ready;
+  $('test').title = s.ready ? '' : 'Set ' + s.missing.join(', ') + ' in .env first';
+}
+
+async function loadMailboxes() {
+  const res = await fetch('/api/mailboxes?limit=200');
+  const list = (await res.json()).data;
+  const body = $('mailboxes');
+  body.replaceChildren();
+  for (const m of list) {
+    const tr = body.insertRow();
+    tr.insertCell().textContent = m.display_name;
+    tr.insertCell().textContent = m.email;
+    const cell = tr.insertCell();
+    const toggle = document.createElement('button');
+    toggle.className = 'secondary small';
+    toggle.textContent = m.is_active ? 'Active – click to disable' : 'Disabled – click to enable';
+    toggle.addEventListener('click', () => guarded(async () => {
+      await api('PUT', `/mailboxes/${m.id}`, { is_active: m.is_active ? '0' : '1' });
+      await loadMailboxes();
+    }));
+    cell.append(toggle);
+  }
+}
+
+$('addMailbox').addEventListener('click', () => guarded(async () => {
+  await api('POST', '/mailboxes', { display_name: $('mbName').value, email: $('mbEmail').value });
+  $('mbName').value = '';
+  $('mbEmail').value = '';
+  await loadMailboxes();
+}));
+
+$('test').addEventListener('click', () => guarded(async () => {
+  $('test').disabled = true;
+  $('test').textContent = 'Testing…';
+  try {
+    const r = await api('POST', '/settings/graph/test');
+    $('testResult').hidden = false;
+    badge($('rToken'), r.token_ok, 'OK', 'Failed', r.error || '');
+    badge($('rSend'), r.can_send, 'granted', 'missing – add Mail.Send and grant admin consent');
+    badge($('rRead'), r.can_read, 'granted', 'missing – add Mail.ReadWrite and grant admin consent');
+    const body = $('rMailboxes');
+    body.replaceChildren();
+    if (!r.mailboxes.length) body.insertRow().insertCell().textContent = r.token_ok ? 'No active mailboxes.' : 'Not tested (sign-in failed).';
+    for (const m of r.mailboxes) {
+      const tr = body.insertRow();
+      tr.insertCell().textContent = m.email;
+      badge(tr.insertCell(), m.ok, 'OK', 'Failed', m.ok ? `inbox has ${m.inbox_items} message(s)` : m.error);
+    }
+  } finally {
+    $('test').textContent = 'Test connection';
+    await loadStatus();
+  }
+}));
+
+async function loadUsers() {
+  const res = await fetch('/api/users?limit=200');
+  if (!res.ok) throw new Error('Users: ' + (await res.json().catch(() => ({}))).error);
+  const list = (await res.json()).data;
+  const me = await api('GET', '/me');
+  const body = $('users');
+  body.replaceChildren();
+  for (const u of list) {
+    const tr = body.insertRow();
+    tr.insertCell().textContent = u.email;
+    tr.insertCell().textContent = u.display_name || '';
+    const mine = me.id === u.id;
+    const roleCell = tr.insertCell();
+    const activeCell = tr.insertCell();
+    if (mine) {
+      roleCell.textContent = u.role + ' (you)';
+      activeCell.textContent = 'yes';
+    } else {
+      const select = document.createElement('select');
+      ['viewer', 'editor', 'admin'].forEach((r) => { const o = document.createElement('option'); o.textContent = r; select.append(o); });
+      select.value = u.role;
+      select.addEventListener('change', () => guarded(async () => { try { await api('PUT', `/users/${u.id}`, { role: select.value }); } finally { await loadUsers(); } }));
+      roleCell.append(select);
+      const toggle = document.createElement('button');
+      toggle.className = 'secondary small';
+      toggle.textContent = u.is_active ? 'Active – disable' : 'Disabled – enable';
+      toggle.addEventListener('click', () => guarded(async () => { await api('PUT', `/users/${u.id}`, { is_active: u.is_active ? '0' : '1' }); await loadUsers(); }));
+      activeCell.append(toggle);
+    }
+    tr.insertCell().textContent = u.last_login_at || 'never';
+  }
+}
+
+$('addUser').addEventListener('click', () => guarded(async () => {
+  await api('POST', '/users', { email: $('uEmail').value, display_name: $('uName').value, role: $('uRole').value });
+  $('uEmail').value = '';
+  $('uName').value = '';
+  await loadUsers();
+}));
+
+guarded(async () => { await loadStatus(); await loadMailboxes(); await loadUsers(); });
+</script>
+<script src="/auth.js"></script>
+</body>
+</html>

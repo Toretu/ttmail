@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Mailings | Campaign workspace</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="app-shell">
+    <aside class="sidebar">
+      <div class="brand">
+        <div class="brand-mark">M</div>
+        <div>
+          <strong>Mailings</strong>
+          <span>Sponsor workspace</span>
+        </div>
+      </div>
+
+      <nav class="main-nav" aria-label="Main navigation">
+        <button class="nav-item active" data-view="dashboard"><span class="nav-icon">⌂</span>Dashboard</button>
+        <button class="nav-item" data-view="companies"><span class="nav-icon">▣</span>Companies</button>
+        <button class="nav-item" data-view="contacts"><span class="nav-icon">♙</span>Contacts</button>
+        <button class="nav-item" data-view="groups"><span class="nav-icon">◎</span>Groups</button>
+        <button class="nav-item" data-view="campaigns"><span class="nav-icon">✦</span>Campaigns</button>
+        <button class="nav-item" data-view="replies"><span class="nav-icon">↩</span>Replies &amp; follow-up <span class="nav-count">7</span></button>
+        <button class="nav-item" data-view="products"><span class="nav-icon">▤</span>Ad products</button>
+        <button class="nav-item" data-view="opportunities"><span class="nav-icon">◈</span>Opportunities</button>
+      </nav>
+
+      <div class="sidebar-bottom">
+        <div class="mailbox-card">
+          <span class="status-dot"></span>
+          <div>
+            <small>Campaign mailbox</small>
+            <strong>mailings@paradisskolekorps.no</strong>
+          </div>
+        </div>
+        <button class="nav-item" data-view="settings"><span class="nav-icon">⚙</span>Settings</button>
+        <div class="user-card">
+          <div class="avatar avatar-purple">IN</div>
+          <div><strong>Ingrid Nilsen</strong><span>Administrator</span></div>
+          <span class="more">•••</span>
+        </div>
+      </div>
+    </aside>
+
+    <main class="main-content">
+      <header class="topbar">
+        <div class="breadcrumbs"><span>Mailings</span><b>/</b><strong id="breadcrumb">Dashboard</strong></div>
+        <div class="top-actions">
+          <button class="icon-button" title="Notifications">♢<span class="notification-dot"></span></button>
+          <button class="help-button">?</button>
+        </div>
+      </header>
+
+      <div id="view-container"></div>
+    </main>
+  </div>
+
+  <div class="toast" id="toast" role="status"></div>
+
+  <div class="modal-backdrop" id="company-modal" hidden>
+    <form class="modal" id="company-form">
+      <div class="modal-header">
+        <div><span class="eyebrow">CUSTOMER DATABASE</span><h2>Add company</h2></div>
+        <button type="button" class="modal-close" data-close-modal>×</button>
+      </div>
+      <label>Company name<input name="name" required placeholder="Example AS"></label>
+      <div class="form-grid">
+        <label>Category<select name="category"><option>Local business</option><option>Sports & leisure</option><option>Retail</option><option>Professional services</option></select></label>
+        <label>City<input name="city" required placeholder="Oslo"></label>
+      </div>
+      <div class="form-grid">
+        <label>Contact person<input name="contact" required placeholder="First and last name"></label>
+        <label>Email<input name="email" type="email" required placeholder="name@example.com"></label>
+      </div>
+      <label>Notes<textarea name="notes" rows="3" placeholder="Useful context for follow-up"></textarea></label>
+      <div class="modal-actions"><button type="button" class="button secondary" data-close-modal>Cancel</button><button class="button primary">Add company</button></div>
+    </form>
+  </div>
+
+  <script src="app.js"></script>
+<script src="/auth.js"></script>
+</body>
+</html>

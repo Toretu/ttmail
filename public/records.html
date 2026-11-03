@@ -1,0 +1,285 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Companies and contacts – Mailings</title>
+<style>
+  body { font: 15px/1.5 system-ui, sans-serif; margin: 0; background: #f6f5fb; color: #222; }
+  .topnav { background: #2b1d6b; padding: 10px 24px; display: flex; gap: 20px; }
+  .topnav a { color: #fff; text-decoration: none; font-weight: 600; }
+  .topnav a:hover { text-decoration: underline; }
+  main { max-width: 1100px; margin: 0 auto; padding: 24px; }
+  h1 { margin-top: 0; } h2 { margin: 0 0 10px; font-size: 18px; }
+  .panel { background: #fff; border-radius: 10px; padding: 20px; box-shadow: 0 1px 4px rgba(0,0,0,.08); margin-bottom: 20px; }
+  .tabs { display: flex; gap: 8px; margin-bottom: 16px; }
+  .tabs button { background: #e4e0f7; color: #3a2a99; }
+  .tabs button.active { background: #5b3fd1; color: #fff; }
+  .row { display: flex; gap: 10px; flex-wrap: wrap; align-items: end; }
+  label { display: flex; flex-direction: column; font-weight: 600; font-size: 13px; gap: 3px; }
+  input, select, textarea, button { font: inherit; padding: 7px 10px; }
+  button { border: 0; border-radius: 6px; background: #5b3fd1; color: #fff; cursor: pointer; }
+  button.secondary { background: #e4e0f7; color: #3a2a99; }
+  button.delete { background: #b42318; }
+  button.small { padding: 3px 10px; font-size: 13px; }
+  button:disabled { opacity: .5; cursor: not-allowed; }
+  table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+  th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid #eee; vertical-align: top; }
+  td.actions { white-space: nowrap; text-align: right; }
+  .error { color: #a11; font-weight: 600; } .ok { color: #176a34; font-weight: 600; } .hint { color: #666; font-size: 13px; }
+  dialog { border: 0; border-radius: 12px; padding: 22px; width: min(640px, 92vw); box-shadow: 0 8px 40px rgba(0,0,0,.3); }
+  dialog::backdrop { background: rgba(0,0,0,.4); }
+  .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .grid .wide { grid-column: 1 / -1; }
+  .grid input, .grid select, .grid textarea { width: 100%; box-sizing: border-box; }
+</style>
+</head>
+<body>
+<nav class="topnav"><a href="/app/">← Back to main screen</a><a href="/records.html">Companies &amp; contacts</a><a href="/campaigns.html">Campaigns &amp; products</a><a href="/import.html">Import</a><a href="/settings.html">Settings</a></nav>
+<main>
+  <h1>Companies and contacts</h1>
+  <p id="message" class="error"></p>
+  <div class="tabs">
+    <button id="tabCompanies" class="active">Companies</button>
+    <button id="tabContacts" class="secondary">Contacts</button>
+  </div>
+
+  <div class="panel">
+    <div class="row">
+      <label>Search <input id="search" placeholder="Name, city, email…" size="28"></label>
+      <label id="statusFilterWrap">Status
+        <select id="statusFilter"><option value="">All</option><option>active</option><option>inactive</option><option>do_not_contact</option></select>
+      </label>
+      <button id="add">＋ Add</button>
+      <span class="hint" id="count"></span>
+    </div>
+    <table><thead id="head"></thead><tbody id="body"></tbody></table>
+  </div>
+</main>
+
+<dialog id="editor">
+  <form method="dialog" id="form">
+    <h2 id="editorTitle"></h2>
+    <div class="grid" id="fields"></div>
+    <p id="formError" class="error"></p>
+    <div class="row"><button type="submit" id="save">Save</button><button type="button" class="secondary" id="cancel">Cancel</button></div>
+  </form>
+</dialog>
+
+<dialog id="confirmDelete">
+  <form method="dialog" id="deleteForm">
+    <h2>Delete company</h2>
+    <p id="deleteText"></p>
+    <label>Type the company name to confirm <input id="deleteName" autocomplete="off"></label>
+    <p id="deleteError" class="error"></p>
+    <div class="row"><button type="submit" class="delete" id="deleteGo" disabled>Delete permanently</button><button type="button" class="secondary" id="deleteCancel">Cancel</button></div>
+  </form>
+</dialog>
+
+<script>
+const $ = (id) => document.getElementById(id);
+const COMPANY_STATUS = ['active', 'inactive', 'do_not_contact'];
+const CONSENT = ['unknown', 'granted', 'withdrawn'];
+
+const KINDS = {
+  companies: {
+    label: 'company',
+    path: '/companies',
+    columns: [['name', 'Company'], ['org_number', 'Org no.'], ['city', 'City'], ['category', 'Category'], ['status', 'Status']],
+    fields: [
+      ['name', 'Name', 'text', true], ['org_number', 'Org number', 'text'], ['billing_address', 'Billing address', 'text', false, 'wide'],
+      ['postal_code', 'Postal code', 'text'], ['city', 'City', 'text'], ['country', 'Country (2 letters)', 'text'],
+      ['website', 'Website (https://…)', 'text'], ['category', 'Category', 'text'], ['status', 'Status', COMPANY_STATUS],
+      ['notes', 'Notes', 'textarea', false, 'wide'],
+    ],
+  },
+  contacts: {
+    label: 'contact',
+    path: '/contacts',
+    columns: [['name', 'Name'], ['company', 'Company'], ['job_title', 'Title'], ['email', 'Email'], ['phone', 'Phone'], ['consent_status', 'Consent']],
+    fields: [
+      ['company_id', 'Company', 'company', true, 'wide'], ['first_name', 'First name', 'text', true], ['last_name', 'Last name', 'text', true],
+      ['job_title', 'Job title', 'text'], ['email', 'Email', 'text', true], ['phone', 'Phone', 'text'], ['consent_status', 'Consent', CONSENT],
+      ['notes', 'Notes', 'textarea', false, 'wide'],
+    ],
+  },
+};
+
+let kind = 'companies';
+let companies = [];
+let rows = [];
+let editing = null;
+let deleting = null;
+let searchTimer = null;
+
+async function api(method, path, body) {
+  const res = await fetch('/api' + path, {
+    method,
+    headers: body ? { 'Content-Type': 'application/json' } : {},
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  const json = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    const details = json.details && Object.keys(json.details).length ? ': ' + Object.entries(json.details).map(([k, v]) => `${k} ${v}`).join(', ') : '';
+    throw new Error((json.error || `Request failed (${res.status})`) + details);
+  }
+  return json;
+}
+
+async function fetchAll(path, extra = '') {
+  const all = [];
+  for (let offset = 0; ; offset += 200) {
+    const page = await api('GET', `${path}?limit=200&offset=${offset}${extra}`);
+    all.push(...page.data);
+    if (all.length >= page.meta.total || page.data.length === 0) return { data: all, total: page.meta.total };
+  }
+}
+
+async function guarded(fn, target = $('message')) {
+  target.textContent = '';
+  try { await fn(); } catch (e) { target.textContent = e.message; }
+}
+
+function cell(tr, text) { tr.insertCell().textContent = text ?? ''; }
+
+function companyName(id) { return companies.find((c) => c.id === id)?.name ?? `#${id}`; }
+
+async function load() {
+  const q = $('search').value.trim();
+  let extra = q ? `&q=${encodeURIComponent(q)}` : '';
+  if (kind === 'companies' && $('statusFilter').value) extra += `&status=${encodeURIComponent($('statusFilter').value)}`;
+  if (kind === 'contacts' && $('statusFilter').value) extra += `&consent_status=${encodeURIComponent($('statusFilter').value)}`;
+  companies = (await fetchAll('/companies')).data;
+  const result = await fetchAll(KINDS[kind].path, extra);
+  rows = result.data;
+  $('count').textContent = `${result.total} ${KINDS[kind].label}${result.total === 1 ? '' : 's'}`;
+  render();
+}
+
+function render() {
+  const def = KINDS[kind];
+  const head = $('head');
+  head.replaceChildren();
+  const hr = head.insertRow();
+  def.columns.forEach(([, label]) => { const th = document.createElement('th'); th.textContent = label; hr.append(th); });
+  hr.append(document.createElement('th'));
+
+  const body = $('body');
+  body.replaceChildren();
+  if (!rows.length) {
+    const td = body.insertRow().insertCell();
+    td.colSpan = def.columns.length + 1;
+    td.textContent = 'Nothing found.';
+    return;
+  }
+  for (const r of rows) {
+    const tr = body.insertRow();
+    for (const [key] of def.columns) {
+      if (key === 'name' && kind === 'contacts') cell(tr, `${r.first_name} ${r.last_name}`);
+      else if (key === 'company') cell(tr, companyName(r.company_id));
+      else cell(tr, r[key]);
+    }
+    const actions = tr.insertCell();
+    actions.className = 'actions';
+    const edit = document.createElement('button');
+    edit.className = 'secondary small'; edit.textContent = 'Edit';
+    edit.addEventListener('click', () => openEditor(r));
+    const del = document.createElement('button');
+    del.className = 'delete small'; del.textContent = 'Delete';
+    del.addEventListener('click', () => askDelete(r));
+    actions.append(edit, ' ', del);
+  }
+}
+
+function setKind(next) {
+  kind = next;
+  $('tabCompanies').className = kind === 'companies' ? 'active' : 'secondary';
+  $('tabContacts').className = kind === 'contacts' ? 'active' : 'secondary';
+  const select = $('statusFilter');
+  select.replaceChildren();
+  const options = kind === 'companies' ? COMPANY_STATUS : CONSENT;
+  $('statusFilterWrap').firstChild.textContent = kind === 'companies' ? 'Status ' : 'Consent ';
+  ['', ...options].forEach((v) => { const o = document.createElement('option'); o.value = v; o.textContent = v || 'All'; select.append(o); });
+  guarded(load);
+}
+
+function openEditor(record) {
+  editing = record;
+  const def = KINDS[kind];
+  $('editorTitle').textContent = `${record ? 'Edit' : 'Add'} ${def.label}`;
+  $('formError').textContent = '';
+  const box = $('fields');
+  box.replaceChildren();
+  for (const [key, label, type, required, wide] of def.fields) {
+    const wrap = document.createElement('label');
+    if (wide) wrap.className = 'wide';
+    wrap.append(label + (required ? ' *' : ''));
+    let input;
+    if (type === 'textarea') { input = document.createElement('textarea'); input.rows = 3; }
+    else if (type === 'company' || Array.isArray(type)) {
+      input = document.createElement('select');
+      const choices = type === 'company' ? companies.map((c) => [c.id, c.name]) : type.map((v) => [v, v]);
+      choices.forEach(([v, text]) => { const o = document.createElement('option'); o.value = v; o.textContent = text; input.append(o); });
+    } else { input = document.createElement('input'); input.type = 'text'; }
+    input.name = key;
+    input.value = record ? (record[key] ?? '') : (key === 'status' ? 'active' : key === 'consent_status' ? 'unknown' : key === 'country' ? 'NO' : '');
+    wrap.append(input);
+    box.append(wrap);
+  }
+  $('editor').showModal();
+}
+
+$('form').addEventListener('submit', (event) => {
+  event.preventDefault();
+  guarded(async () => {
+    const body = {};
+    for (const el of $('fields').querySelectorAll('[name]')) body[el.name] = el.name === 'company_id' ? Number(el.value) : el.value;
+    const def = KINDS[kind];
+    if (editing) await api('PUT', `${def.path}/${editing.id}`, body);
+    else await api('POST', def.path, body);
+    $('editor').close();
+    await load();
+  }, $('formError'));
+});
+$('cancel').addEventListener('click', () => $('editor').close());
+
+function askDelete(record) {
+  deleting = record;
+  $('deleteError').textContent = '';
+  $('deleteName').value = '';
+  if (kind === 'companies') {
+    $('deleteText').textContent = `This permanently deletes ${record.name} and all its contacts. Companies with registered sales cannot be deleted; set them to inactive instead.`;
+    $('deleteName').parentElement.hidden = false;
+    $('deleteGo').disabled = true;
+    $('confirmDelete').querySelector('h2').textContent = 'Delete company';
+  } else {
+    $('deleteText').textContent = `Delete the contact ${record.first_name} ${record.last_name} (${record.email})? This cannot be undone.`;
+    $('deleteName').parentElement.hidden = true;
+    $('deleteGo').disabled = false;
+    $('confirmDelete').querySelector('h2').textContent = 'Delete contact';
+  }
+  $('confirmDelete').showModal();
+}
+$('deleteName').addEventListener('input', () => { $('deleteGo').disabled = $('deleteName').value.trim() !== deleting.name; });
+$('deleteCancel').addEventListener('click', () => $('confirmDelete').close());
+$('deleteForm').addEventListener('submit', (event) => {
+  event.preventDefault();
+  guarded(async () => {
+    const def = KINDS[kind];
+    await api('DELETE', `${def.path}/${deleting.id}`, kind === 'companies' ? { confirm_name: $('deleteName').value } : undefined);
+    $('confirmDelete').close();
+    await load();
+  }, $('deleteError'));
+});
+
+$('tabCompanies').addEventListener('click', () => setKind('companies'));
+$('tabContacts').addEventListener('click', () => setKind('contacts'));
+$('add').addEventListener('click', () => openEditor(null));
+$('statusFilter').addEventListener('change', () => guarded(load));
+$('search').addEventListener('input', () => { clearTimeout(searchTimer); searchTimer = setTimeout(() => guarded(load), 250); });
+
+setKind(location.hash === '#contacts' ? 'contacts' : 'companies');
+</script>
+<script src="/auth.js"></script>
+</body>
+</html>
