@@ -22,6 +22,10 @@ final class App
     {
         try {
             $path = rtrim((string) parse_url($_SERVER['REQUEST_URI'] ?? '/', PHP_URL_PATH), '/') ?: '/';
+            if ($path === '/' && ($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'GET') {
+                header('Location: /campaigns.html', true, 302);
+                exit;
+            }
             Auth::enforce($_SERVER['REQUEST_METHOD'] ?? 'GET', $path);
             $result = self::router()->dispatch($_SERVER['REQUEST_METHOD'] ?? 'GET', $path);
             $status = 200;
