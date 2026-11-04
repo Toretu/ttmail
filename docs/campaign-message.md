@@ -42,7 +42,7 @@ Put `{{details_link}}` in the message text. It becomes a link, unique per contac
 
 Rules:
 
-- The link works only for contacts that were actually sent this campaign, not for unsubscribed contacts, and shows nothing for closed campaigns. The preview and test mail link is inactive.
+- The link works only for contacts that were actually sent this campaign, not for unsubscribed contacts, and shows nothing for closed campaigns. In preview and test mail the link opens the page with sample data and nothing is saved.
 - Answers are stored in `campaign_responses` (one per contact and campaign; a new answer replaces the old). **Master data is never changed by the public page.** Editors review them in the campaign's "Answers from recipients" panel and press *Apply corrections* or *Mark handled*.
 - Only the whitelisted fields can be changed. The email address cannot; the recipient writes it in the message.
 - Anyone who gets the mail (for example by forwarding) can use the link, like the unsubscribe link, so it can only propose changes.

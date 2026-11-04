@@ -42,3 +42,4 @@ All meaningful implementation, configuration, and documentation changes must be 
 - Added migration 008 (`campaign_responses`), `ReplyController`, `ResponseController` and the "Answers from recipients" panel. Answers are reviewed by an editor before master data changes.
 - Smoke test extended to 124 checks.
 - Added `{{products}}` placeholder: the available products with prices are listed in the mail.
+- Details link in test mail now opens a preview page with sample data (nothing saved) instead of "Link not valid".

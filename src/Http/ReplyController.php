@@ -35,6 +35,9 @@ final class ReplyController
     public function submit(): never
     {
         $ctx = $this->context($_POST['t'] ?? '', $_POST['c'] ?? '');
+        if (!empty($ctx['preview'])) {
+            self::page(200, 'Test only / Kun test', '<p>This was a test link, so nothing was saved. Real recipients\' answers are saved for review.</p><p>Dette var en testlenke, så ingenting ble lagret.</p>');
+        }
         $posted = ['company' => [], 'contact' => []];
         foreach (['company' => self::COMPANY_FIELDS, 'contact' => self::CONTACT_FIELDS] as $group => $fields) {
             foreach ($fields as $field => $label) {
@@ -108,6 +111,9 @@ final class ReplyController
             $invalid();
         }
         $pdo = Database::connect();
+        if ($token === str_repeat('0', 32)) {
+            return $this->sample($pdo, (int) $campaignId);
+        }
         $stmt = $pdo->prepare(
             "SELECT c.*, r.campaign_id FROM contact_tokens t
              JOIN contacts c ON c.id = t.contact_id
@@ -134,6 +140,25 @@ final class ReplyController
         ];
     }
 
+    /** Context for links in preview and test mail: sample data, nothing is saved. @return array<string,mixed> */
+    private function sample(\PDO $pdo, int $campaignId): array
+    {
+        $campaign = $pdo->prepare('SELECT id, name, status FROM campaigns WHERE id = ?');
+        $campaign->execute([$campaignId]);
+        $campaign = $campaign->fetch();
+        if ($campaign === false) {
+            self::page(404, 'Link not valid', '<p>This link is not valid or has expired. / Lenken er ugyldig eller utløpt.</p>');
+        }
+        $products = $pdo->prepare('SELECT id, name, description, price FROM campaign_products WHERE campaign_id = ? ORDER BY sort_order, id');
+        $products->execute([$campaignId]);
+        return [
+            'token' => str_repeat('0', 32), 'campaign' => $campaign, 'preview' => true, 'closed' => false,
+            'contact' => ['id' => 0, 'email' => 'kari@example.com', 'first_name' => 'Kari', 'last_name' => 'Nordmann', 'job_title' => 'Daglig leder', 'phone' => '900 00 000'],
+            'company' => ['name' => 'Eksempel AS', 'org_number' => '999 999 999', 'billing_address' => 'Storgata 1', 'postal_code' => '0001', 'city' => 'Oslo', 'website' => 'https://example.com'],
+            'products' => $products->fetchAll(),
+        ];
+    }
+
     /**
      * @param array<string,mixed> $ctx
      * @param array<string,array<string,string>> $posted
@@ -145,6 +170,7 @@ final class ReplyController
             self::page(200, (string) $ctx['campaign']['name'], '<p>This campaign is closed. / Denne kampanjen er avsluttet.</p>');
         }
         $e = self::e(...);
+        if (empty($ctx['preview'])) {
         $existing = Database::connect()->prepare('SELECT product_ids, comment FROM campaign_responses WHERE campaign_id = ? AND contact_id = ?');
         $existing->execute([$ctx['campaign']['id'], $ctx['contact']['id']]);
         $prev = $existing->fetch();
@@ -152,8 +178,10 @@ final class ReplyController
             $wanted = array_map('strval', json_decode((string) $prev['product_ids'], true) ?: []);
             $comment = (string) $prev['comment'];
         }
+        }
 
-        $html = $error !== null ? '<p class="err">' . $e($error) . '</p>' : '';
+        $html = !empty($ctx['preview']) ? '<p class="err">TEST: sample data. Nothing you enter is saved. / TEST: eksempeldata, ingenting lagres.</p>' : '';
+        $html .= $error !== null ? '<p class="err">' . $e($error) . '</p>' : '';
         $html .= '<p>Check that your details are correct and correct anything that is wrong. / Sjekk at opplysningene stemmer, og rett opp det som er feil.</p>';
         $html .= '<form method="post" action="/reply"><input type="hidden" name="t" value="' . $e($ctx['token']) . '"><input type="hidden" name="c" value="' . (int) $ctx['campaign']['id'] . '">';
         $html .= '<h2>' . $e((string) $ctx['company']['name']) . '</h2>';

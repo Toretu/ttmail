@@ -182,4 +182,6 @@ check "products placeholder saved" 200 PUT "/api/campaigns/$campaign_id/message"
 check "product for mail" 201 POST "/api/campaigns/$campaign_id/products" '{"name":"Mail <b>page</b>","price":"2500"}'
 check "products preview" 200 POST "/api/campaigns/$campaign_id/message/preview" '{}'
 grep -q "<li>Mail &lt;b&gt;page&lt;/b&gt; – kr 2 500</li>" "$BODY" && echo "PASS products listed and escaped" || { echo "FAIL products in mail: $(cat "$BODY")"; fail=1; }
+code=$(curl -s -o "$BODY" -w '%{http_code}' "$BASE/reply?t=00000000000000000000000000000000&c=$send_id"); [ "$code" = 200 ] && grep -q "Nothing you enter is saved" "$BODY" && echo "PASS test link opens preview" || { echo "FAIL test link $code"; fail=1; }
+code=$(curl -s -o "$BODY" -w '%{http_code}' -X POST -d "t=00000000000000000000000000000000" -d "c=$send_id" -d "comment=x" "$BASE/reply"); grep -q "nothing was saved" "$BODY" && echo "PASS test link saves nothing" || { echo "FAIL test post $code"; fail=1; }
 exit $fail
