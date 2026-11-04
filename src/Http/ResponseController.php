@@ -44,6 +44,8 @@ final class ResponseController
                 'id' => (int) $row['id'], 'status' => $row['status'], 'updated_at' => $row['updated_at'],
                 'contact' => trim($row['first_name'] . ' ' . $row['last_name']), 'email' => $row['email'], 'company' => $row['company'],
                 'changes' => $diff,
+                'company_id' => (int) $row['company_id'],
+                'product_ids' => array_values(array_filter(json_decode((string) $row['product_ids'], true) ?: [], static fn ($id): bool => isset($names[$id]))),
                 'products' => array_values(array_filter(array_map(static fn ($id) => $names[$id] ?? null, json_decode((string) $row['product_ids'], true) ?: []))),
                 'comment' => $row['comment'],
             ];

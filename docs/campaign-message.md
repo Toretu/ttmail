@@ -56,3 +56,5 @@ Rules:
 ## Product list in the mail
 
 `{{products}}` inserts a bullet list of the campaign's products with prices (and the description, if any), for example "Half page – kr 1 500". Products that are sold out are left out; sold and reserved quantities both count as taken. The list is built when each mail is sent, so later mails reflect sales made in the meantime. Use it together with `{{details_link}}` so recipients can choose.
+
+**Reserve chosen products:** next to an answer with chosen products, this button (after a confirm) registers one reserved sale per product for that company, skips any the company already has, respects stock limits, and marks the answer handled. The sales then show in the campaign summary.

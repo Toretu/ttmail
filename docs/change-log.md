@@ -43,3 +43,4 @@ All meaningful implementation, configuration, and documentation changes must be 
 - Smoke test extended to 124 checks.
 - Added `{{products}}` placeholder: the available products with prices are listed in the mail.
 - Details link in test mail now opens a preview page with sample data (nothing saved) instead of "Link not valid".
+- Answers panel: "Reserve chosen products" button creates reservations from a recipient's choices.

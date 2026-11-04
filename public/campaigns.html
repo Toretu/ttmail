@@ -443,6 +443,24 @@ async function loadResponses() {
       td.append(b, ' ');
     };
     if (r.changes.length) act('Apply corrections', 'apply', '');
+    if (r.product_ids.length) {
+      const b = document.createElement('button');
+      b.className = 'small';
+      b.textContent = 'Reserve chosen products';
+      b.title = 'Registers a reservation for each chosen product, for this company';
+      b.addEventListener('click', () => guarded(async () => {
+        if (!confirm(`Reserve ${r.products.join(', ')} for ${r.company}?`)) return;
+        const existing = await api('GET', `/campaigns/${current}/sales?company_id=${r.company_id}`);
+        for (const pid of r.product_ids) {
+          if (existing.some((s) => Number(s.product_id) === pid && s.status !== 'cancelled')) continue;
+          await api('POST', `/campaigns/${current}/sales`, { product_id: pid, company_id: r.company_id, quantity: 1, status: 'reserved', notes: 'From reply link' });
+        }
+        await api('POST', `/campaigns/${current}/responses/${r.id}/dismiss`, {});
+        await loadResponses();
+        await loadDetail();
+      }));
+      td.append(b, ' ');
+    }
     act('Mark handled', 'dismiss', 'secondary');
   }
 }
