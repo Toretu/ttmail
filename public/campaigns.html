@@ -300,12 +300,19 @@ async function loadMessage() {
 }
 
 async function saveMessage() {
+  if ($('mSave').disabled) return;
   await api('PUT', `/campaigns/${current}/message`, { mailbox_id: $('mMailbox').value, subject: $('mSubject').value, body: $('mBody').value });
   $('mInfo').textContent = 'Message saved.';
 }
 
-$('mSave').addEventListener('click', () => guarded(saveMessage));
-$('mPreview').addEventListener('click', () => guarded(async () => {
+async function guardedMsg(fn) {
+  $('mInfo').textContent = '';
+  await guarded(fn);
+  if ($('message').textContent) $('mInfo').textContent = $('message').textContent;
+}
+
+$('mSave').addEventListener('click', () => guardedMsg(saveMessage));
+$('mPreview').addEventListener('click', () => guardedMsg(async () => {
   await saveMessage();
   const recipient = (await apiFull('GET', `/campaigns/${current}/recipients`)).data[0];
   const p = await api('POST', `/campaigns/${current}/message/preview`, recipient ? { contact_id: recipient.contact_id } : {});
@@ -313,10 +320,10 @@ $('mPreview').addEventListener('click', () => guarded(async () => {
   $('mFrame').hidden = false;
   $('mInfo').textContent = `From ${p.from} · Subject: ${p.subject} · ${recipient ? `shown for ${recipient.first_name} ${recipient.last_name}` : 'shown with sample data (no recipients yet)'}`;
 }));
-$('mTest').addEventListener('click', () => guarded(async () => {
+$('mTest').addEventListener('click', () => guardedMsg(async () => {
   await saveMessage();
   const r = await api('POST', `/campaigns/${current}/message/test`, { to: $('mTo').value });
-  $('mInfo').textContent = `Test sent from ${r.from} to ${r.sent_to}. The unsubscribe link in a test mail is inactive.`;
+  $('mInfo').textContent = `${r.dry_run ? 'DRY RUN, nothing delivered: ' : ''}Test sent from ${r.from} to ${r.sent_to}. The unsubscribe link in a test mail is inactive.`;
 }));
 
 const STATE_TEXT = { draft: 'Not started', sending: 'Sending', paused: 'Paused', done: 'Done' };
