@@ -21,8 +21,8 @@ Create a maintainable, low-cost self-hosted customer and campaign management sol
 | Database schema and API foundation | In progress (schema, API, Microsoft 365 sign-in and roles done) | Foundation | MariaDB schema, plain PHP API conventions, migrations, and authentication are ready |
 | Microsoft Graph mail integration | Not started | Foundation | Approved Office 365 mailboxes can send and retrieve campaign mail |
 | Companies and contacts | In progress | Database and API foundation | Companies can have multiple contacts and searchable history |
-| Groups | Not started | Companies and contacts | Groups can be created, reviewed, and reused |
-| Campaigns | In progress (products and sales done; recipients pending) | Groups | Campaign recipients and campaign statistics are available |
+| Groups | Done (groups, filters, members) | Companies and contacts | Groups can be created, reviewed, and reused |
+| Campaigns | In progress (products and sales done; recipients done; message and sending pending) | Groups | Campaign recipients and campaign statistics are available |
 | Controlled email sending | Not started | Campaigns, Microsoft Graph mail integration | Approved campaigns send in controlled batches |
 | Replies and follow-ups | Not started | Email sending | Replies become actionable follow-up records |
 | Advertising products | Done (per-campaign products, capacity, sales summary) | Foundation | Page products, prices, and inventory are configurable |

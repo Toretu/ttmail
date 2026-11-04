@@ -14,6 +14,8 @@ Group ID, name, description, active status, filter definition, owner, audit fiel
 
 ## Group members
 
+Implemented (migrations 001 and 005): `contact_groups`, `contact_group_members` (source manual/filter) and `campaign_recipients` (campaign, contact, email snapshot, status pending/sent/failed/skipped; one row per contact per campaign). Deleting a contact removes its recipient rows; this will be restricted once mail has been sent.
+
 Group, company, contact, membership source, date added, active status.
 
 ## Campaigns

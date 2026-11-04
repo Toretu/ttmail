@@ -50,6 +50,16 @@ final class Schema
     }
 
     /** @return array<string,array<string,mixed>> */
+    public static function groupRules(): array
+    {
+        return [
+            'name' => ['required' => true, 'max' => 150],
+            'description' => ['max' => 500],
+            'is_active' => ['enum' => ['0', '1'], 'default' => '1'],
+        ];
+    }
+
+    /** @return array<string,array<string,mixed>> */
     public static function mailboxRules(): array
     {
         return [

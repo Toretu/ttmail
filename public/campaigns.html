@@ -20,6 +20,8 @@
   .error { color: #a11; font-weight: 600; } .hint { color: #666; font-size: 13px; }
   .danger { border: 1px solid #e3b4b4; }
   button.delete { background: #b42318; }
+  button.secondary { background: #e5e1f7; color: #2b1d6b; }
+  button.small { padding: 3px 8px; font-size: 13px; }
   button:disabled { opacity: .5; cursor: not-allowed; }
   .soldout { color: #a11; font-weight: 600; }
   .topnav { background: #2b1d6b; padding: 10px 24px; display: flex; gap: 20px; }
@@ -28,7 +30,7 @@
 </style>
 </head>
 <body>
-<nav class="topnav"><a href="/campaigns.html">← Home</a><a href="/campaigns.html">Campaigns &amp; products</a><a href="/records.html">Companies &amp; contacts</a><a href="/import.html">Import</a><a href="/settings.html">Settings</a></nav>
+<nav class="topnav"><a href="/campaigns.html">← Home</a><a href="/campaigns.html">Campaigns &amp; products</a><a href="/records.html">Companies &amp; contacts</a><a href="/groups.html">Groups</a><a href="/import.html">Import</a><a href="/settings.html">Settings</a></nav>
 <main>
   <h1>Campaigns, products and sales</h1>
   <p id="message" class="error"></p>
@@ -77,6 +79,24 @@
         <tbody id="saleRows"></tbody>
       </table>
     </div>
+    <div class="panel">
+      <h2>Recipients</h2>
+      <p class="hint">Choose who this campaign is sent to. Unsubscribed contacts and companies that are inactive or marked do-not-contact are never added. Nothing is sent from here.</p>
+      <div class="row">
+        <label>Groups <select id="rGroups" multiple size="4"></select></label>
+        <label>Or <select id="rAll"><option value="">use selected groups</option><option value="all">all contacts</option></select></label>
+        <label>Category <input id="rCategory" size="14" placeholder="optional"></label>
+        <label>City <input id="rCity" size="14" placeholder="optional"></label>
+        <button id="rPreview" class="secondary">Preview</button>
+        <button id="rAdd" disabled>Add recipients</button>
+      </div>
+      <p id="rPreviewText" class="hint"></p>
+      <p><strong id="rTotal"></strong> <span class="hint" id="rStatus"></span></p>
+      <table>
+        <thead><tr><th>Contact</th><th>Company</th><th>Email</th><th>Status</th><th></th></tr></thead>
+        <tbody id="rRows"></tbody>
+      </table>
+    </div>
     <div class="panel danger">
       <h2>Delete campaign</h2>
       <p class="hint">This permanently deletes the campaign, its products and all registered sales. Companies are not affected. Type the campaign name to confirm.</p>
@@ -104,6 +124,17 @@ async function api(method, path, body) {
     throw new Error((json.error || `Request failed (${res.status})`) + details);
   }
   return json.data;
+}
+
+async function apiFull(method, path, body) {
+  const res = await fetch('/api' + path, {
+    method,
+    headers: body ? { 'Content-Type': 'application/json' } : {},
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  const json = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(json.error || `Request failed (${res.status})`);
+  return json;
 }
 
 async function guarded(fn) {
@@ -143,6 +174,8 @@ async function loadDetail() {
   $('detail').hidden = !current;
   if (!current) return;
 
+  $('rPreviewText').textContent = '';
+  $('rAdd').disabled = true;
   const [summary, sales, companies] = await Promise.all([
     api('GET', `/campaigns/${current}/summary`),
     api('GET', `/campaigns/${current}/sales`),
@@ -190,7 +223,69 @@ async function loadDetail() {
     }));
     row.insertCell().append(select);
   }
+  await loadRecipients();
 }
+
+const EXCLUSIONS = { unsubscribed: 'unsubscribed', company_inactive: 'inactive company', company_do_not_contact: 'company marked do-not-contact', invalid_email: 'invalid email' };
+
+function selection() {
+  const groupIds = [...$('rGroups').selectedOptions].map((o) => Number(o.value));
+  const body = {};
+  if ($('rAll').value === 'all') body.all = true; else body.group_ids = groupIds;
+  if ($('rCategory').value.trim()) body.category = $('rCategory').value.trim();
+  if ($('rCity').value.trim()) body.city = $('rCity').value.trim();
+  return body;
+}
+
+async function loadRecipients() {
+  const groups = await api('GET', '/groups');
+  const select = $('rGroups');
+  const chosen = new Set([...select.selectedOptions].map((o) => o.value));
+  select.replaceChildren();
+  groups.filter((g) => Number(g.is_active)).forEach((g) => { option(select, g.id, `${g.name} (${g.member_count})`); select.lastChild.selected = chosen.has(String(g.id)); });
+  const res = await apiFull('GET', `/campaigns/${current}/recipients`);
+  const by = res.meta.by_status;
+  $('rTotal').textContent = `${res.meta.total} recipients`;
+  $('rStatus').textContent = `pending ${by.pending}, sent ${by.sent}, failed ${by.failed}, skipped ${by.skipped}`;
+  const body = $('rRows');
+  body.replaceChildren();
+  for (const r of res.data) {
+    const tr = body.insertRow();
+    cell(tr, `${r.first_name} ${r.last_name}`);
+    cell(tr, r.company);
+    cell(tr, r.email);
+    cell(tr, r.status);
+    if (r.status === 'pending') {
+      const remove = document.createElement('button');
+      remove.className = 'secondary small';
+      remove.textContent = 'Remove';
+      remove.addEventListener('click', () => guarded(async () => { await api('DELETE', `/campaigns/${current}/recipients/${r.contact_id}`); await loadRecipients(); }));
+      tr.insertCell().append(remove);
+    }
+  }
+}
+
+function describePreview(d) {
+  const ex = Object.entries(d.excluded).map(([k, n]) => `${n} ${EXCLUSIONS[k] || k}`);
+  const parts = [`${d.matched} contacts match`, `${d.to_add} will be added`];
+  if (d.already_in_campaign) parts.push(`${d.already_in_campaign} already in the campaign`);
+  if (ex.length) parts.push(`excluded: ${ex.join(', ')}`);
+  return parts.join(' · ');
+}
+
+$('rPreview').addEventListener('click', () => guarded(async () => {
+  $('rAdd').disabled = true;
+  const d = (await apiFull('POST', `/campaigns/${current}/recipients?mode=preview`, selection())).data;
+  $('rPreviewText').textContent = describePreview(d) + (d.sample.length ? ` · e.g. ${d.sample.slice(0, 3).map((s) => s.name || s.email).join(', ')}` : '');
+  $('rAdd').disabled = d.to_add === 0;
+}));
+$('rAdd').addEventListener('click', () => guarded(async () => {
+  const d = (await apiFull('POST', `/campaigns/${current}/recipients`, selection())).data;
+  $('rPreviewText').textContent = `Added ${d.added} recipients.`;
+  $('rAdd').disabled = true;
+  await loadRecipients();
+}));
+for (const id of ['rGroups', 'rAll', 'rCategory', 'rCity']) $(id).addEventListener('change', () => { $('rAdd').disabled = true; $('rPreviewText').textContent = ''; });
 
 $('campaign').addEventListener('change', () => guarded(loadDetail));
 function currentName() {

@@ -12,6 +12,8 @@ use Mailings\Http\HttpException;
 use Mailings\Http\ImportController;
 use Mailings\Http\Json;
 use Mailings\Http\RecordActions;
+use Mailings\Http\GroupController;
+use Mailings\Http\RecipientController;
 use Mailings\Http\SettingsController;
 use Mailings\Http\UserController;
 use Mailings\Http\Router;
@@ -67,6 +69,9 @@ final class App
             'Campaign'
         );
         $campaignActions = new CampaignController($campaigns);
+        $groupsCrud = new CrudController('contact_groups', Schema::groupRules(), ['name'], ['is_active'], 'Group');
+        $groups = new GroupController($groupsCrud);
+        $recipients = new RecipientController($campaigns);
 
         $recordActions = new RecordActions($companies, $contacts);
         $mailboxes = new CrudController('mailboxes', Schema::mailboxRules(), ['display_name', 'email'], ['is_active'], 'Mailbox');
@@ -118,6 +123,17 @@ final class App
         $router->add('GET', '/api/campaigns/{id}/sales', [$campaignActions, 'sales']);
         $router->add('POST', '/api/campaigns/{id}/sales', [$campaignActions, 'createSale']);
         $router->add('PUT', '/api/sales/{id}', [$campaignActions, 'updateSale']);
+        $router->add('GET', '/api/groups', [$groups, 'list']);
+        $router->add('POST', '/api/groups', [$groupsCrud, 'create']);
+        $router->add('GET', '/api/groups/{id}', [$groupsCrud, 'get']);
+        $router->add('PUT', '/api/groups/{id}', [$groupsCrud, 'update']);
+        $router->add('DELETE', '/api/groups/{id}', [$groups, 'delete']);
+        $router->add('GET', '/api/groups/{id}/members', [$groups, 'members']);
+        $router->add('POST', '/api/groups/{id}/members', [$groups, 'addMembers']);
+        $router->add('DELETE', '/api/groups/{id}/members/{contact_id}', [$groups, 'removeMember']);
+        $router->add('GET', '/api/campaigns/{id}/recipients', [$recipients, 'list']);
+        $router->add('POST', '/api/campaigns/{id}/recipients', [$recipients, 'add']);
+        $router->add('DELETE', '/api/campaigns/{id}/recipients/{contact_id}', [$recipients, 'remove']);
         $router->add('GET', '/api/campaigns/{id}/summary', [$campaignActions, 'summary']);
         return $router;
     }

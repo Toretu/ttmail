@@ -1,0 +1,245 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Groups – Mailings</title>
+<style>
+  body { font: 15px/1.5 system-ui, sans-serif; margin: 0; background: #f6f5fb; color: #222; }
+  main { max-width: 1040px; margin: 0 auto; padding: 24px; }
+  h1 { margin-top: 0; } h2 { margin: 0 0 10px; font-size: 18px; }
+  .panel { background: #fff; border-radius: 10px; padding: 20px; box-shadow: 0 1px 4px rgba(0,0,0,.08); margin-bottom: 20px; }
+  .row { display: flex; gap: 10px; flex-wrap: wrap; align-items: end; }
+  label { display: flex; flex-direction: column; font-weight: 600; font-size: 13px; gap: 3px; }
+  input, select, button { font: inherit; padding: 7px 10px; }
+  button { border: 0; border-radius: 6px; background: #5b3fd1; color: #fff; cursor: pointer; }
+  button.secondary { background: #e5e1f7; color: #2b1d6b; }
+  button.small { padding: 3px 8px; font-size: 13px; }
+  button.delete { background: #b42318; }
+  button:disabled { opacity: .5; cursor: not-allowed; }
+  table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+  th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid #eee; }
+  .error { color: #a11; font-weight: 600; } .hint { color: #666; font-size: 13px; }
+  .danger { border: 1px solid #e3b4b4; }
+  .topnav { background: #2b1d6b; padding: 10px 24px; display: flex; gap: 20px; }
+  .topnav a { color: #fff; text-decoration: none; font-weight: 600; }
+  .topnav a:hover { text-decoration: underline; }
+  tr.sel { background: #f0ecff; }
+</style>
+</head>
+<body>
+<nav class="topnav"><a href="/campaigns.html">← Home</a><a href="/campaigns.html">Campaigns &amp; products</a><a href="/records.html">Companies &amp; contacts</a><a href="/groups.html">Groups</a><a href="/import.html">Import</a><a href="/settings.html">Settings</a></nav>
+<main>
+  <h1>Groups</h1>
+  <p id="message" class="error"></p>
+
+  <div class="panel">
+    <h2>All groups</h2>
+    <div class="row">
+      <label>New group <input id="gName" size="26" placeholder="e.g. Previous sponsors"></label>
+      <label>Description <input id="gDesc" size="30"></label>
+      <button id="addGroup">Create</button>
+    </div>
+    <table>
+      <thead><tr><th>Name</th><th>Description</th><th>Members</th><th>Active</th><th></th></tr></thead>
+      <tbody id="groupRows"></tbody>
+    </table>
+  </div>
+
+  <div id="detail" hidden>
+    <div class="panel">
+      <h2 id="groupTitle"></h2>
+      <p class="hint">Unsubscribed contacts can stay in a group; they are skipped automatically when a campaign picks its recipients.</p>
+
+      <h3>Add by filter</h3>
+      <div class="row">
+        <label>Category <input id="fCategory" size="16" placeholder="company category"></label>
+        <label>City <input id="fCity" size="16"></label>
+        <label class="hint" style="font-weight:400"><span><input type="checkbox" id="fAll"> everyone (no filter)</span></label>
+        <button id="fPreview" class="secondary">Preview</button>
+        <button id="fAdd" disabled>Add</button>
+      </div>
+      <p id="fText" class="hint"></p>
+
+      <h3>Add individual contacts</h3>
+      <div class="row">
+        <label>Search contact <input id="cSearch" size="26" placeholder="Name, email…"></label>
+        <button id="cFind" class="secondary">Search</button>
+      </div>
+      <table><tbody id="cResults"></tbody></table>
+
+      <h3>Members</h3>
+      <table>
+        <thead><tr><th>Contact</th><th>Company</th><th>Email</th><th>City</th><th>Category</th><th></th></tr></thead>
+        <tbody id="memberRows"></tbody>
+      </table>
+    </div>
+
+    <div class="panel">
+      <h2>Edit group</h2>
+      <div class="row">
+        <label>Name <input id="eName" size="26"></label>
+        <label>Description <input id="eDesc" size="30"></label>
+        <label>Active <select id="eActive"><option value="1">yes</option><option value="0">no</option></select></label>
+        <button id="saveGroup">Save</button>
+      </div>
+    </div>
+
+    <div class="panel danger">
+      <h2>Delete group</h2>
+      <p class="hint">Deletes the group only. Contacts and companies are not affected. Type the group name to confirm.</p>
+      <div class="row">
+        <label>Group name <input id="confirmName" size="30" autocomplete="off"></label>
+        <button id="deleteGroup" class="delete" disabled>Delete group</button>
+      </div>
+    </div>
+  </div>
+</main>
+<script>
+const $ = (id) => document.getElementById(id);
+let groups = [];
+let current = null;
+
+async function apiFull(method, path, body) {
+  const res = await fetch('/api' + path, {
+    method,
+    headers: body ? { 'Content-Type': 'application/json' } : {},
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  const json = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    const details = json.details && Object.keys(json.details).length ? ': ' + Object.entries(json.details).map(([k, v]) => `${k} ${v}`).join(', ') : '';
+    throw new Error((json.error || `Request failed (${res.status})`) + details);
+  }
+  return json;
+}
+const api = async (method, path, body) => (await apiFull(method, path, body)).data;
+
+async function guarded(fn) {
+  $('message').textContent = '';
+  try { await fn(); } catch (e) { $('message').textContent = e.message; }
+}
+
+function cell(tr, text) { tr.insertCell().textContent = text ?? ''; }
+
+function smallButton(label, onClick, cls = 'secondary small') {
+  const b = document.createElement('button');
+  b.className = cls;
+  b.textContent = label;
+  b.addEventListener('click', () => guarded(onClick));
+  return b;
+}
+
+async function loadGroups() {
+  groups = await api('GET', '/groups');
+  const body = $('groupRows');
+  body.replaceChildren();
+  for (const g of groups) {
+    const tr = body.insertRow();
+    if (String(g.id) === String(current)) tr.className = 'sel';
+    cell(tr, g.name);
+    cell(tr, g.description);
+    cell(tr, g.member_count);
+    cell(tr, Number(g.is_active) ? 'yes' : 'no');
+    tr.insertCell().append(smallButton('Open', () => select(g.id)));
+  }
+  if (current && !groups.some((g) => String(g.id) === String(current))) current = null;
+  $('detail').hidden = !current;
+}
+
+async function select(id) {
+  current = id;
+  history.replaceState(null, '', '#' + id);
+  await loadGroups();
+  const g = groups.find((x) => String(x.id) === String(id));
+  $('groupTitle').textContent = g.name;
+  $('eName').value = g.name;
+  $('eDesc').value = g.description || '';
+  $('eActive').value = String(Number(g.is_active));
+  $('confirmName').value = '';
+  $('deleteGroup').disabled = true;
+  $('fText').textContent = '';
+  $('fAdd').disabled = true;
+  $('cResults').replaceChildren();
+  await loadMembers();
+}
+
+async function loadMembers() {
+  const members = await api('GET', `/groups/${current}/members`);
+  const body = $('memberRows');
+  body.replaceChildren();
+  for (const m of members) {
+    const tr = body.insertRow();
+    cell(tr, `${m.first_name} ${m.last_name}${m.unsubscribed_at ? ' (unsubscribed)' : ''}`);
+    cell(tr, m.company); cell(tr, m.email); cell(tr, m.city); cell(tr, m.category);
+    tr.insertCell().append(smallButton('Remove', async () => { await api('DELETE', `/groups/${current}/members/${m.id}`); await refresh(); }));
+  }
+}
+
+async function refresh() { await loadGroups(); await loadMembers(); }
+
+function filterBody() {
+  const body = { all: $('fAll').checked };
+  if ($('fCategory').value.trim()) body.category = $('fCategory').value.trim();
+  if ($('fCity').value.trim()) body.city = $('fCity').value.trim();
+  if (!body.all && !body.category && !body.city) throw new Error('Enter a category or city, or tick "everyone".');
+  return body;
+}
+
+$('addGroup').addEventListener('click', () => guarded(async () => {
+  const created = await api('POST', '/groups', { name: $('gName').value, description: $('gDesc').value });
+  $('gName').value = ''; $('gDesc').value = '';
+  await select(created.id);
+}));
+$('fPreview').addEventListener('click', () => guarded(async () => {
+  $('fAdd').disabled = true;
+  const d = (await apiFull('POST', `/groups/${current}/members?mode=preview`, filterBody())).data;
+  $('fText').textContent = `${d.matched} contacts match · ${d.to_add} would be added · ${d.already_members} already members`;
+  $('fAdd').disabled = d.to_add === 0;
+}));
+$('fAdd').addEventListener('click', () => guarded(async () => {
+  const d = (await apiFull('POST', `/groups/${current}/members`, filterBody())).data;
+  $('fText').textContent = `Added ${d.added} contacts.`;
+  $('fAdd').disabled = true;
+  await refresh();
+}));
+for (const id of ['fCategory', 'fCity', 'fAll']) $(id).addEventListener('input', () => { $('fAdd').disabled = true; });
+
+$('cFind').addEventListener('click', () => guarded(async () => {
+  const q = encodeURIComponent($('cSearch').value.trim());
+  const found = await api('GET', `/contacts?limit=20&q=${q}`);
+  const body = $('cResults');
+  body.replaceChildren();
+  if (!found.length) { cell(body.insertRow(), 'No contacts found.'); return; }
+  for (const c of found) {
+    const tr = body.insertRow();
+    cell(tr, `${c.first_name} ${c.last_name}`); cell(tr, c.email);
+    tr.insertCell().append(smallButton('Add to group', async () => { await api('POST', `/groups/${current}/members`, { contact_ids: [c.id] }); await refresh(); }));
+  }
+}));
+$('cSearch').addEventListener('keydown', (e) => { if (e.key === 'Enter') $('cFind').click(); });
+
+$('saveGroup').addEventListener('click', () => guarded(async () => {
+  await api('PUT', `/groups/${current}`, { name: $('eName').value, description: $('eDesc').value, is_active: $('eActive').value });
+  await select(current);
+}));
+$('confirmName').addEventListener('input', () => {
+  const g = groups.find((x) => String(x.id) === String(current));
+  $('deleteGroup').disabled = !g || $('confirmName').value.trim() !== g.name;
+});
+$('deleteGroup').addEventListener('click', () => guarded(async () => {
+  await api('DELETE', `/groups/${current}`, { confirm_name: $('confirmName').value });
+  current = null;
+  history.replaceState(null, '', location.pathname);
+  await loadGroups();
+}));
+
+guarded(async () => {
+  const wanted = location.hash.slice(1);
+  await loadGroups();
+  if (wanted && groups.some((g) => String(g.id) === wanted)) await select(wanted);
+});
+</script>
+<script src="/auth.js"></script>
+</body>
+</html>

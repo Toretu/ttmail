@@ -32,3 +32,4 @@ All meaningful implementation, configuration, and documentation changes must be 
 - Config now reads the project `.env` file itself when real environment variables are not set, so `php bin/migrate.php` works on a plain server without Docker.
 - `/` now redirects to the campaigns page (which sends signed-out users to the login page).
 - Fixed post-login redirect regex (invalid delimiter on some PHP builds); default landing page is /campaigns.html. Documented required PHP extensions (curl).
+- Added contact groups (page + API), campaign recipients with preview and automatic exclusion of unsubscribed/inactive contacts (migration 005, docs/groups-and-recipients.md). Nothing is sent yet.

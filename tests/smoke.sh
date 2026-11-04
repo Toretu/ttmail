@@ -68,4 +68,35 @@ check "summary" 200 GET "/api/campaigns/$campaign_id/summary"
 grep -q '"remaining":0' "$BODY" && grep -q '"remaining":null' "$BODY" && echo "PASS summary remaining" || { echo "FAIL summary remaining"; fail=1; }
 check "cancel frees item" 200 PUT "/api/sales/$sale_id" '{"status":"cancelled"}'
 check "sell again" 201 POST "/api/campaigns/$campaign_id/sales" "{\"product_id\":$limited_id,\"company_id\":$company_id}"
+
+# Groups and recipients
+check "create active company" 201 POST /api/companies "{\"name\":\"Active AS $suffix\",\"city\":\"Bergen\",\"category\":\"smoke-$suffix\"}"
+active_company=$(json_id)
+check "good contact" 201 POST /api/contacts "{\"company_id\":$active_company,\"first_name\":\"Ola\",\"last_name\":\"Nord\",\"email\":\"ola-$suffix@example.com\"}"
+good_contact=$(json_id)
+check "second contact" 201 POST /api/contacts "{\"company_id\":$active_company,\"first_name\":\"Eva\",\"last_name\":\"Sor\",\"email\":\"eva-$suffix@example.com\"}"
+unsub_contact=$(json_id)
+check "unsubscribe second" 200 POST "/api/contacts/$unsub_contact/unsubscribe"
+check "create group" 201 POST /api/groups "{\"name\":\"Smoke group $suffix\"}"
+group_id=$(json_id)
+check "duplicate group" 409 POST /api/groups "{\"name\":\"Smoke group $suffix\"}"
+check "add members by filter" 200 POST "/api/groups/$group_id/members" "{\"category\":\"smoke-$suffix\"}"
+grep -q '"added":2' "$BODY" && echo "PASS group filter added 2" || { echo "FAIL group filter: $(cat "$BODY")"; fail=1; }
+check "add members again" 200 POST "/api/groups/$group_id/members" "{\"contact_ids\":[$good_contact]}"
+grep -q '"added":0' "$BODY" && echo "PASS no duplicate member" || { echo "FAIL duplicate member"; fail=1; }
+check "list members" 200 GET "/api/groups/$group_id/members"
+check "recipients need a selection" 422 POST "/api/campaigns/$campaign_id/recipients" '{"all":false}'
+check "recipients preview" 200 POST "/api/campaigns/$campaign_id/recipients?mode=preview" "{\"group_ids\":[$group_id]}"
+grep -q '"to_add":1' "$BODY" && grep -q '"unsubscribed":1' "$BODY" && echo "PASS preview excludes unsubscribed" || { echo "FAIL preview: $(cat "$BODY")"; fail=1; }
+check "recipients commit" 200 POST "/api/campaigns/$campaign_id/recipients" "{\"group_ids\":[$group_id]}"
+grep -q '"added":1' "$BODY" && echo "PASS recipient added" || { echo "FAIL commit: $(cat "$BODY")"; fail=1; }
+check "recipients commit again" 200 POST "/api/campaigns/$campaign_id/recipients" "{\"group_ids\":[$group_id]}"
+grep -q '"added":0' "$BODY" && grep -q '"already_in_campaign":1' "$BODY" && echo "PASS no duplicate recipient" || { echo "FAIL duplicate: $(cat "$BODY")"; fail=1; }
+check "list recipients" 200 GET "/api/campaigns/$campaign_id/recipients"
+grep -q '"total":1' "$BODY" && echo "PASS recipient total" || { echo "FAIL total"; fail=1; }
+check "remove recipient" 200 DELETE "/api/campaigns/$campaign_id/recipients/$good_contact"
+check "remove recipient twice" 404 DELETE "/api/campaigns/$campaign_id/recipients/$good_contact"
+check "remove member" 200 DELETE "/api/groups/$group_id/members/$good_contact"
+check "delete group wrong name" 422 DELETE "/api/groups/$group_id" '{"confirm_name":"x"}'
+check "delete group" 200 DELETE "/api/groups/$group_id" "{\"confirm_name\":\"Smoke group $suffix\"}"
 exit $fail
