@@ -34,3 +34,6 @@ Disable affected jobs, restore the previous application version, restore configu
 PHP 8.3 with the `curl`, `pdo_mysql`, `mbstring` and `zip` extensions (Debian/Ubuntu: `sudo apt install php8.3-curl php8.3-mysql php8.3-mbstring php8.3-zip`, then restart php-fpm). The `curl` extension is required for Microsoft sign-in and Graph. Check with `php -m` (and phpinfo for the FPM version, which can differ from the command line).
 
 The prototype in `mockup/` is only served by the Docker setup at `/app/`. It is not part of a production deployment unless you add an alias for it.
+
+## Scheduled sending
+Add the cron entry from [sending.md](sending.md) so approved campaigns are actually sent. After deploying, run `php bin/migrate.php` (migration 007 adds the sending state).

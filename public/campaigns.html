@@ -117,6 +117,28 @@
         <tbody id="rRows"></tbody>
       </table>
     </div>
+    <div class="panel" id="sendPanel">
+      <h2>Sending</h2>
+      <p id="sDry" class="error" hidden>DRY RUN: mail is only logged on the server, nothing is delivered.</p>
+      <p><strong id="sState"></strong> <span class="hint" id="sCounts"></span></p>
+      <p id="sReason" class="error"></p>
+      <div id="sApprove" class="row" hidden>
+        <label>Type the number of recipients to approve <input id="sConfirm" size="8" inputmode="numeric" autocomplete="off"></label>
+        <button id="sGo" disabled>Approve and start sending</button>
+      </div>
+      <p id="sNeed" class="hint"></p>
+      <div class="row">
+        <button id="sPause" class="secondary" hidden>Pause</button>
+        <button id="sResume" hidden>Resume</button>
+        <button id="sRetry" class="secondary" hidden>Queue failed again</button>
+      </div>
+      <p class="hint" id="sNote"></p>
+      <table id="sProblemsTable" hidden>
+        <thead><tr><th>Email</th><th>Result</th><th>Reason</th></tr></thead>
+        <tbody id="sProblems"></tbody>
+      </table>
+    </div>
+
     <div class="panel danger">
       <h2>Delete campaign</h2>
       <p class="hint">This permanently deletes the campaign, its products and all registered sales. Companies are not affected. Type the campaign name to confirm.</p>
@@ -245,6 +267,7 @@ async function loadDetail() {
   }
   await loadMessage();
   await loadRecipients();
+  await loadSend();
 }
 
 
@@ -285,6 +308,62 @@ $('mTest').addEventListener('click', () => guarded(async () => {
   $('mInfo').textContent = `Test sent from ${r.from} to ${r.sent_to}. The unsubscribe link in a test mail is inactive.`;
 }));
 
+const STATE_TEXT = { draft: 'Not started', sending: 'Sending', paused: 'Paused', done: 'Done' };
+let sendTimer = null;
+let sendInfo = null;
+
+async function loadSend() {
+  const s = await api('GET', `/campaigns/${current}/send`);
+  sendInfo = s;
+  const c = s.counts;
+  $('sDry').hidden = !s.dry_run;
+  $('sState').textContent = STATE_TEXT[s.state] || s.state;
+  $('sCounts').textContent = `sent ${c.sent} · waiting ${c.pending + c.sending} · failed ${c.failed} · skipped ${c.skipped}`;
+  $('sReason').textContent = s.pause_reason || '';
+  const draft = s.state === 'draft';
+  $('sApprove').hidden = !draft || c.pending === 0;
+  $('sPause').hidden = s.state !== 'sending';
+  $('sResume').hidden = s.state !== 'paused';
+  $('sRetry').hidden = !(['paused', 'done'].includes(s.state) && c.failed > 0);
+  const needs = [];
+  if (draft) {
+    if (c.pending === 0) needs.push('add recipients');
+    if (!s.test_sent_at) needs.push('send a test mail of the saved message');
+  }
+  $('sNeed').textContent = needs.length ? `Before you can approve: ${needs.join(', ')}.` : '';
+  $('sGo').disabled = !draft || needs.length > 0 || $('sConfirm').value.trim() !== String(c.pending);
+  $('sConfirm').disabled = needs.length > 0;
+  $('sNote').textContent = s.state === 'sending' ? `About ${s.rate_per_minute} mails per minute, sent in the background. This page updates by itself.` : (draft && c.pending ? `Mail goes out at about ${s.rate_per_minute} per minute, one message per contact.` : '');
+  const body = $('sProblems');
+  body.replaceChildren();
+  for (const p of s.problems) {
+    const tr = body.insertRow();
+    cell(tr, p.email); cell(tr, p.status); cell(tr, p.error || '');
+  }
+  $('sProblemsTable').hidden = s.problems.length === 0;
+  clearTimeout(sendTimer);
+  if (s.state === 'sending') {
+    const id = current;
+    sendTimer = setTimeout(() => { if (id === current) loadSend().then(loadRecipients).catch(() => {}); }, 10000);
+  }
+}
+
+$('sConfirm').addEventListener('input', () => { $('sGo').disabled = !sendInfo || sendInfo.state !== 'draft' || !sendInfo.test_sent_at || $('sConfirm').value.trim() !== String(sendInfo.counts.pending); });
+$('sGo').addEventListener('click', () => guarded(async () => {
+  const n = Number($('sConfirm').value.trim());
+  if (!confirm(`Send "${$('mSubject').value}" to ${n} recipients?\n\nThis cannot be undone once mail has gone out.`)) return;
+  await api('POST', `/campaigns/${current}/send/approve`, { confirm_count: n });
+  $('sConfirm').value = '';
+  await loadDetail();
+}));
+for (const [id, action] of [['sPause', 'pause'], ['sResume', 'resume'], ['sRetry', 'retry-failed']]) {
+  $(id).addEventListener('click', () => guarded(async () => {
+    if (action === 'retry-failed' && !confirm('Entries marked "Outcome unknown" may already have been delivered. Check the mailbox Sent Items first. Queue them again anyway?')) return;
+    await api('POST', `/campaigns/${current}/send/${action}`);
+    await loadDetail();
+  }));
+}
+
 const EXCLUSIONS = { unsubscribed: 'unsubscribed', company_inactive: 'inactive company', company_do_not_contact: 'company marked do-not-contact', invalid_email: 'invalid email' };
 
 function selection() {
@@ -305,7 +384,7 @@ async function loadRecipients() {
   const res = await apiFull('GET', `/campaigns/${current}/recipients`);
   const by = res.meta.by_status;
   $('rTotal').textContent = `${res.meta.total} recipients`;
-  $('rStatus').textContent = `pending ${by.pending}, sent ${by.sent}, failed ${by.failed}, skipped ${by.skipped}`;
+  $('rStatus').textContent = `pending ${by.pending + by.sending}, sent ${by.sent}, failed ${by.failed}, skipped ${by.skipped}`;
   const body = $('rRows');
   body.replaceChildren();
   for (const r of res.data) {
@@ -313,7 +392,7 @@ async function loadRecipients() {
     cell(tr, `${r.first_name} ${r.last_name}`);
     cell(tr, r.company);
     cell(tr, r.email);
-    cell(tr, r.status);
+    cell(tr, r.status).title = r.error || '';
     if (r.status === 'pending') {
       const remove = document.createElement('button');
       remove.className = 'secondary small';

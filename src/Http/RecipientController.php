@@ -20,14 +20,14 @@ final class RecipientController
         $this->campaigns->find($id);
         $pdo = Database::connect();
         $stmt = $pdo->prepare(
-            'SELECT r.contact_id, r.email, r.status, r.added_at, c.first_name, c.last_name, co.name AS company
+            'SELECT r.contact_id, r.email, r.status, r.added_at, r.sent_at, r.error, c.first_name, c.last_name, co.name AS company
              FROM campaign_recipients r JOIN contacts c ON c.id = r.contact_id JOIN companies co ON co.id = c.company_id
              WHERE r.campaign_id = ? ORDER BY co.name, c.last_name, c.first_name'
         );
         $stmt->execute([$id]);
         $counts = $pdo->prepare('SELECT status, COUNT(*) FROM campaign_recipients WHERE campaign_id = ? GROUP BY status');
         $counts->execute([$id]);
-        $byStatus = ['pending' => 0, 'sent' => 0, 'failed' => 0, 'skipped' => 0];
+        $byStatus = ['pending' => 0, 'sending' => 0, 'sent' => 0, 'failed' => 0, 'skipped' => 0];
         foreach ($counts->fetchAll(\PDO::FETCH_KEY_PAIR) as $status => $n) {
             $byStatus[$status] = (int) $n;
         }
@@ -47,6 +47,9 @@ final class RecipientController
         $campaign = $this->campaigns->find($id);
         if ($campaign['status'] === 'closed') {
             throw new HttpException(409, 'This campaign is closed. Recipients cannot be added.');
+        }
+        if (in_array($campaign['send_state'], ['sending', 'paused'], true)) {
+            throw new HttpException(409, 'Sending is in progress or paused. Recipients cannot be added until it is done, because only the approved recipients may be sent to.');
         }
         $contacts = Selection::contacts(Json::body());
 
@@ -75,6 +78,9 @@ final class RecipientController
             foreach ($toAdd as $c) {
                 $insert->execute([$id, $c['id'], $c['email']]);
                 $added += $insert->rowCount();
+            }
+            if ($added > 0 && $campaign['send_state'] === 'done') {
+                $pdo->prepare("UPDATE campaigns SET send_state = 'draft', approved_by = NULL, approved_at = NULL WHERE id = ?")->execute([$id]);
             }
             $pdo->commit();
         }

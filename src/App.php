@@ -15,6 +15,7 @@ use Mailings\Http\RecordActions;
 use Mailings\Http\GroupController;
 use Mailings\Http\RecipientController;
 use Mailings\Http\MessageController;
+use Mailings\Http\SendController;
 use Mailings\Http\SettingsController;
 use Mailings\Http\UnsubscribeController;
 use Mailings\Http\UserController;
@@ -75,6 +76,7 @@ final class App
         $groups = new GroupController($groupsCrud);
         $recipients = new RecipientController($campaigns);
         $message = new MessageController($campaigns);
+        $send = new SendController($campaigns);
         $unsubscribe = new UnsubscribeController();
 
         $recordActions = new RecordActions($companies, $contacts);
@@ -131,6 +133,11 @@ final class App
         $router->add('PUT', '/api/campaigns/{id}/message', [$message, 'save']);
         $router->add('POST', '/api/campaigns/{id}/message/preview', [$message, 'preview']);
         $router->add('POST', '/api/campaigns/{id}/message/test', [$message, 'test']);
+        $router->add('GET', '/api/campaigns/{id}/send', [$send, 'status']);
+        $router->add('POST', '/api/campaigns/{id}/send/approve', [$send, 'approve']);
+        $router->add('POST', '/api/campaigns/{id}/send/pause', [$send, 'pause']);
+        $router->add('POST', '/api/campaigns/{id}/send/resume', [$send, 'resume']);
+        $router->add('POST', '/api/campaigns/{id}/send/retry-failed', [$send, 'retryFailed']);
         $router->add('GET', '/unsubscribe', [$unsubscribe, 'show']);
         $router->add('POST', '/unsubscribe', [$unsubscribe, 'confirm']);
         $router->add('GET', '/api/groups', [$groups, 'list']);

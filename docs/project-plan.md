@@ -22,7 +22,7 @@ Create a maintainable, low-cost self-hosted customer and campaign management sol
 | Microsoft Graph mail integration | Not started | Foundation | Approved Office 365 mailboxes can send and retrieve campaign mail |
 | Companies and contacts | In progress | Database and API foundation | Companies can have multiple contacts and searchable history |
 | Groups | Done (groups, filters, members) | Companies and contacts | Groups can be created, reviewed, and reused |
-| Campaigns | In progress (products and sales done; recipients, message, preview and test send done; bulk sending pending) | Groups | Campaign recipients and campaign statistics are available |
+| Campaigns | In progress (products and sales done; recipients, message, preview and test send done; sending with approval, pause and retry done; replies and follow-up next) | Groups | Campaign recipients and campaign statistics are available |
 | Controlled email sending | Not started | Campaigns, Microsoft Graph mail integration | Approved campaigns send in controlled batches |
 | Replies and follow-ups | Not started | Email sending | Replies become actionable follow-up records |
 | Advertising products | Done (per-campaign products, capacity, sales summary) | Foundation | Page products, prices, and inventory are configurable |

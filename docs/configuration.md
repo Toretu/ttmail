@@ -99,3 +99,11 @@ The Settings page (`/settings.html`) shows whether each value is set (never the 
 | `AUTH_DEV_LOGIN` | `1` enables a local development login, only honoured when `APP_ENV=development`. Must be `0` or unset in production. |
 
 Users and roles are managed in Settings → Users. See [security.md](security.md).
+
+## Sending variables
+| Variable | Purpose |
+|---|---|
+| `MAIL_RATE_PER_MINUTE` | Messages per minute the worker sends (1–30, default 10). Exchange Online allows about 30 per minute per mailbox. |
+| `MAIL_DRY_RUN` | `1` logs mail instead of sending, only honoured when `APP_ENV=development`. Keep `0` in production. |
+
+The worker `bin/send-queue.php` must be run every minute from cron. See [sending.md](sending.md).

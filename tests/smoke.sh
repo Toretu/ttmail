@@ -121,4 +121,40 @@ grep -q '"consent_status":"withdrawn"' "$BODY" && echo "PASS unsubscribe recorde
 code=$(curl -s -o /dev/null -w '%{http_code}' "$BASE/unsubscribe?t=bad"); [ "$code" = 404 ] && echo "PASS bad token 404" || { echo "FAIL bad token $code"; fail=1; }
 check "test mail bad address" 422 POST "/api/campaigns/$campaign_id/message/test" '{"to":"nope"}'
 COOKIES="$VIEWER_JAR" check "viewer cannot send test" 403 POST "/api/campaigns/$campaign_id/message/test" '{"to":"a@example.com"}'
+
+# Approval and sending (needs MAIL_DRY_RUN=1 in .env; the worker runs inside the web container)
+WORKER=${WORKER:-docker compose exec -T web php bin/send-queue.php}
+check "send campaign" 201 POST /api/campaigns "{\"name\":\"Send campaign $suffix\"}"
+send_id=$(json_id)
+check "approve without message" 409 POST "/api/campaigns/$send_id/send/approve" '{"confirm_count":1}'
+check "send message" 200 PUT "/api/campaigns/$send_id/message" "{\"mailbox_id\":$mailbox_id,\"subject\":\"Hei\",\"body\":\"Hei {{first_name}}\"}"
+check "send company" 201 POST /api/companies "{\"name\":\"Send AS $suffix\",\"category\":\"send-$suffix\"}"
+send_company=$(json_id)
+for n in 1 2 3; do
+  check "send contact $n" 201 POST /api/contacts "{\"company_id\":$send_company,\"first_name\":\"S$n\",\"last_name\":\"T\",\"email\":\"send$n-$suffix@example.com\"}"
+  eval "send_contact_$n=$(json_id)"
+done
+check "add send recipients" 200 POST "/api/campaigns/$send_id/recipients" "{\"all\":true,\"category\":\"send-$suffix\"}"
+grep -q '"added":3' "$BODY" && echo "PASS 3 recipients" || { echo "FAIL recipients: $(cat "$BODY")"; fail=1; }
+check "approve needs test" 409 POST "/api/campaigns/$send_id/send/approve" '{"confirm_count":3}'
+check "send test" 200 POST "/api/campaigns/$send_id/message/test" '{"to":"me@example.com"}'
+check "approve wrong count" 422 POST "/api/campaigns/$send_id/send/approve" '{"confirm_count":2}'
+COOKIES="$VIEWER_JAR" check "viewer cannot approve" 403 POST "/api/campaigns/$send_id/send/approve" '{"confirm_count":3}'
+check "approve" 200 POST "/api/campaigns/$send_id/send/approve" '{"confirm_count":3}'
+check "approve twice" 409 POST "/api/campaigns/$send_id/send/approve" '{"confirm_count":3}'
+check "message locked" 409 PUT "/api/campaigns/$send_id/message" '{"subject":"changed"}'
+check "recipients locked while sending" 409 POST "/api/campaigns/$send_id/recipients" '{"all":true}'
+check "pause" 200 POST "/api/campaigns/$send_id/send/pause"
+$WORKER >/dev/null 2>&1
+check "status while paused" 200 GET "/api/campaigns/$send_id/send"
+grep -q '"sent":0' "$BODY" && grep -q '"pending":3' "$BODY" && echo "PASS paused sends nothing" || { echo "FAIL paused: $(cat "$BODY")"; fail=1; }
+check "unsubscribe one before sending" 200 POST "/api/contacts/$send_contact_3/unsubscribe"
+check "resume" 200 POST "/api/campaigns/$send_id/send/resume"
+$WORKER >/dev/null 2>&1
+check "status after worker" 200 GET "/api/campaigns/$send_id/send"
+grep -q '"sent":2' "$BODY" && grep -q '"skipped":1' "$BODY" && grep -q '"state":"done"' "$BODY" && echo "PASS sent 2, skipped unsubscribed, done" || { echo "FAIL after worker: $(cat "$BODY")"; fail=1; }
+$WORKER >/dev/null 2>&1
+check "status after second run" 200 GET "/api/campaigns/$send_id/send"
+grep -q '"sent":2' "$BODY" && echo "PASS no duplicate sends" || { echo "FAIL duplicate: $(cat "$BODY")"; fail=1; }
+check "cannot delete mailed campaign" 409 DELETE "/api/campaigns/$send_id" "{\"confirm_name\":\"Send campaign $suffix\"}"
 exit $fail

@@ -103,7 +103,7 @@ final class GraphClient
         );
         if ($status !== 202) {
             $text = $this->describe($response, 'Microsoft refused the message (HTTP ' . $status . ')');
-            throw new GraphException($status === 403 ? $text . ' (check Mail.Send permission and the Application Access Policy for this mailbox)' : $text);
+            throw new GraphException($status === 403 ? $text . ' (check Mail.Send permission and the Application Access Policy for this mailbox)' : $text, $status);
         }
     }
 

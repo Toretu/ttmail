@@ -5,10 +5,9 @@ namespace Mailings\Http;
 
 use Mailings\Auth\Auth;
 use Mailings\Database;
-use Mailings\Graph\GraphClient;
-use Mailings\Graph\GraphException;
+use Mailings\Mail\Composer;
+use Mailings\Mail\Dispatch;
 use Mailings\Mail\Template;
-use Mailings\Mail\Unsubscribe;
 
 /** The campaign's message (sender mailbox, subject, body), preview, and test send. */
 final class MessageController
@@ -25,7 +24,7 @@ final class MessageController
             'mailbox_id' => $c['mailbox_id'] === null ? null : (int) $c['mailbox_id'],
             'subject' => $c['subject'] ?? '',
             'body' => $c['body'] ?? '',
-            'locked' => $this->sentCount((int) $c['id']) > 0,
+            'locked' => $c['send_state'] !== 'draft' || $this->sentCount((int) $c['id']) > 0,
             'placeholders' => Template::PLACEHOLDERS,
         ]];
     }
@@ -35,8 +34,9 @@ final class MessageController
     {
         $id = (int) $params['id'];
         $this->campaigns->find($id);
-        if ($this->sentCount($id) > 0) {
-            throw new HttpException(409, 'Mail has already been sent for this campaign, so the message can no longer be changed.');
+        $campaign = $this->campaigns->find($id);
+        if ($campaign['send_state'] !== 'draft' || $this->sentCount($id) > 0) {
+            throw new HttpException(409, 'Sending has been approved or started for this campaign, so the message can no longer be changed.');
         }
         $body = Json::body();
         $errors = [];
@@ -68,7 +68,7 @@ final class MessageController
         if ($errors !== []) {
             throw new HttpException(422, 'Validation failed', $errors);
         }
-        Database::connect()->prepare('UPDATE campaigns SET mailbox_id = ?, subject = ?, body = ? WHERE id = ?')
+        Database::connect()->prepare('UPDATE campaigns SET mailbox_id = ?, subject = ?, body = ?, test_sent_at = NULL WHERE id = ?')
             ->execute([$mailboxId, $subject === '' ? null : $subject, $text === '' ? null : $text, $id]);
         return $this->get($params);
     }
@@ -104,25 +104,16 @@ final class MessageController
         if (filter_var($to, FILTER_VALIDATE_EMAIL) === false) {
             throw new HttpException(422, 'Validation failed', ['to' => 'must be a valid email address']);
         }
-        $status = GraphClient::status();
-        if (!$status['ready']) {
-            throw new HttpException(409, 'The Microsoft 365 connection is not configured yet. See Settings.');
-        }
         $mailbox = $this->mailbox($campaign);
         [$subject, $html] = $this->render($campaign, null);
-
         try {
-            $client = new GraphClient();
-            $client->sendMail($client->acquireToken()['token'], $mailbox['email'], [
-                'subject' => '[TEST] ' . $subject,
-                'body' => ['contentType' => 'HTML', 'content' => $html],
-                'toRecipients' => [['emailAddress' => ['address' => $to]]],
-            ]);
-        } catch (GraphException $e) {
+            Dispatch::send($mailbox['email'], $to, '[TEST] ' . $subject, $html);
+        } catch (\Mailings\Graph\GraphException $e) {
             throw new HttpException(502, $e->getMessage());
         }
+        Database::connect()->prepare('UPDATE campaigns SET test_sent_at = CURRENT_TIMESTAMP WHERE id = ?')->execute([$campaign['id']]);
         error_log(sprintf('Test mail for campaign %d sent from %s to %s by %s', $campaign['id'], $mailbox['email'], $to, Auth::user()['email'] ?? '?'));
-        return ['data' => ['sent_to' => $to, 'from' => $mailbox['email']]];
+        return ['data' => ['sent_to' => $to, 'from' => $mailbox['email'], 'dry_run' => Dispatch::dryRun()]];
     }
 
     /** @param array<string,mixed> $campaign */
@@ -155,34 +146,10 @@ final class MessageController
         return $mailbox;
     }
 
-    /**
-     * @param array<string,mixed> $campaign
-     * @return array{string,string} subject, html
-     */
+    /** @param array<string,mixed> $campaign @return array{string,string} */
     private function render(array $campaign, ?int $contactId): array
     {
-        $pdo = Database::connect();
-        $vars = ['first_name' => 'Kari', 'last_name' => 'Nordmann', 'full_name' => 'Kari Nordmann', 'company' => 'Eksempel AS', 'campaign' => (string) $campaign['name']];
-        $link = rtrim((string) \Mailings\Config::get('APP_URL', ''), '/') . '/unsubscribe?t=' . str_repeat('0', 32);
-        if ($contactId !== null) {
-            $stmt = $pdo->prepare('SELECT c.id, c.first_name, c.last_name, co.name AS company FROM contacts c JOIN companies co ON co.id = c.company_id WHERE c.id = ?');
-            $stmt->execute([$contactId]);
-            $c = $stmt->fetch();
-            if ($c === false) {
-                throw new HttpException(404, 'Contact not found');
-            }
-            $vars = [
-                'first_name' => $c['first_name'], 'last_name' => $c['last_name'],
-                'full_name' => trim($c['first_name'] . ' ' . $c['last_name']),
-                'company' => $c['company'], 'campaign' => (string) $campaign['name'],
-            ];
-            $link = Unsubscribe::url(Unsubscribe::tokenFor((int) $c['id']));
-        }
-        $mailbox = $this->mailbox($campaign);
-        return [
-            Template::subject((string) $campaign['subject'], $vars),
-            Template::html((string) $campaign['body'], $vars, $link, (string) $mailbox['display_name']),
-        ];
+        return Composer::build($campaign, $this->mailbox($campaign), $contactId);
     }
 
     private function sentCount(int $campaignId): int

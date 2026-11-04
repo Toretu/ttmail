@@ -12,6 +12,10 @@ Contact ID, company, first name, last name, job title, email, phone, consent sta
 
 Group ID, name, description, active status, filter definition, owner, audit fields.
 
+## Sending state
+
+Migrations 006 and 007: campaigns hold `mailbox_id`, `subject`, `body`, `send_state` (draft/sending/paused/done), `test_sent_at`, `approved_by`, `approved_at`, `pause_reason`. `campaign_recipients` gain status `sending`, `claimed_at`, `sent_at`, `error`. `contact_tokens` holds per-contact unsubscribe tokens.
+
 ## Group members
 
 Implemented (migrations 001 and 005): `contact_groups`, `contact_group_members` (source manual/filter) and `campaign_recipients` (campaign, contact, email snapshot, status pending/sent/failed/skipped; one row per contact per campaign). Deleting a contact removes its recipient rows; this will be restricted once mail has been sent.

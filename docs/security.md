@@ -34,6 +34,8 @@ Planned role names in the original design (campaign managers, volunteers) are ma
 - Record failures rather than marking them successful.
 - Restrict Microsoft Graph application access to approved mailboxes.
 
+Implemented: test mail required before approval, explicit approval by typing the recipient count (recorded with user and time), one message per contact, a personal unsubscribe link in every mail, unsubscribed contacts re-checked at send time, claim-before-send so nothing is sent twice, locked message and recipients while sending, automatic pause on Microsoft errors, and a per-minute rate limit. See [sending.md](sending.md).
+
 ## Data protection
 
 - Use test data outside Production.
