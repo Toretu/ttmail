@@ -24,7 +24,7 @@ Create a maintainable, low-cost self-hosted customer and campaign management sol
 | Groups | Done (groups, filters, members) | Companies and contacts | Groups can be created, reviewed, and reused |
 | Campaigns | In progress (products and sales done; recipients, message, preview and test send done; sending with approval, pause and retry done; replies and follow-up next) | Groups | Campaign recipients and campaign statistics are available |
 | Controlled email sending | Not started | Campaigns, Microsoft Graph mail integration | Approved campaigns send in controlled batches |
-| Replies and follow-ups | Not started | Email sending | Replies become actionable follow-up records |
+| Replies and follow-ups | In progress (reply fetching and follow-up stages built; opportunities and payments next) | Email sending | Replies become actionable follow-up records |
 | Advertising products | Done (per-campaign products, capacity, sales summary) | Foundation | Page products, prices, and inventory are configurable |
 | Opportunities and payments | Not started | Campaigns, products | Quotes, sales, invoices, and payments are tracked |
 | Reports and dashboards | Not started | Campaigns, opportunities | Users can see campaign progress and value |

@@ -44,3 +44,4 @@ All meaningful implementation, configuration, and documentation changes must be 
 - Added `{{products}}` placeholder: the available products with prices are listed in the mail.
 - Details link in test mail now opens a preview page with sample data (nothing saved) instead of "Link not valid".
 - Answers panel: "Reserve chosen products" button creates reservations from a recipient's choices.
+- Added replies: migration 009, `Mail/Replies`, `bin/fetch-replies.php`, `ReplyInboxController`, the Replies page with stages, follow-up date, note and history. See `docs/replies.md`.

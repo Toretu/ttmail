@@ -70,3 +70,5 @@ Mailbox ID, display name, Microsoft 365 email address, Graph sender identity, ac
 - One or more approved mailboxes can be used by campaigns.
 
 Migration 008: `campaign_responses` (campaign_id, contact_id, `changes` JSON, `product_ids` JSON, comment, status new/applied/dismissed), unique per contact and campaign.
+
+Migration 009: `replies` (mailbox, Graph message id, contact, campaign, subject, body, stage, note, next_followup), `reply_stage_history`, `mailbox_sync` (last fetch per mailbox).

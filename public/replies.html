@@ -1,0 +1,168 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Replies – Mailings</title>
+<style>
+  body { font: 15px/1.5 system-ui, sans-serif; margin: 0; background: #f6f5fb; color: #222; }
+  main { max-width: 1100px; margin: 0 auto; padding: 24px; }
+  h1 { margin-top: 0; } h2 { margin: 0 0 10px; font-size: 18px; }
+  .panel { background: #fff; border-radius: 10px; padding: 20px; box-shadow: 0 1px 4px rgba(0,0,0,.08); margin-bottom: 20px; }
+  .row { display: flex; gap: 10px; flex-wrap: wrap; align-items: end; }
+  label { display: flex; flex-direction: column; font-weight: 600; font-size: 13px; gap: 3px; }
+  input, select, textarea, button { font: inherit; padding: 7px 10px; }
+  button { border: 0; border-radius: 6px; background: #5b3fd1; color: #fff; cursor: pointer; }
+  button.secondary { background: #e5e1f7; color: #2b1d6b; }
+  button:disabled { opacity: .5; cursor: not-allowed; }
+  table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+  th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid #eee; vertical-align: top; }
+  tr.item { cursor: pointer; } tr.item:hover, tr.sel { background: #f0ecff; }
+  .error { color: #a11; font-weight: 600; } .hint { color: #666; font-size: 13px; }
+  .chips { display: flex; gap: 8px; flex-wrap: wrap; margin: 10px 0; }
+  .chip { background: #e5e1f7; color: #2b1d6b; border-radius: 14px; padding: 3px 12px; cursor: pointer; font-size: 13px; font-weight: 600; }
+  .chip.on { background: #5b3fd1; color: #fff; }
+  pre { white-space: pre-wrap; word-break: break-word; font: inherit; background: #faf9ff; border: 1px solid #eee; border-radius: 8px; padding: 12px; max-height: 360px; overflow: auto; }
+  .topnav { background: #2b1d6b; padding: 10px 24px; display: flex; gap: 20px; }
+  .topnav a { color: #fff; text-decoration: none; font-weight: 600; }
+  .topnav a:hover { text-decoration: underline; }
+</style>
+</head>
+<body>
+<nav class="topnav"><a href="/campaigns.html">← Home</a><a href="/campaigns.html">Campaigns &amp; products</a><a href="/replies.html">Replies</a><a href="/records.html">Companies &amp; contacts</a><a href="/groups.html">Groups</a><a href="/import.html">Import</a><a href="/settings.html">Settings</a></nav>
+<main>
+  <h1>Replies</h1>
+  <p id="message" class="error"></p>
+
+  <div class="panel">
+    <div class="row">
+      <button id="sync">Check mailboxes now</button>
+      <label>Campaign <select id="fCampaign"><option value="">all</option></select></label>
+      <label><span>&nbsp;</span><span><input type="checkbox" id="fDue"> Follow-up due</span></label>
+    </div>
+    <p class="hint" id="syncInfo"></p>
+    <div class="chips" id="chips"></div>
+    <p class="hint">Only mail from people who are contacts in the system is kept. Replies are fetched automatically every few minutes.</p>
+    <p id="empty" class="hint" hidden>No replies here yet.</p>
+    <table id="table" hidden>
+      <thead><tr><th>Received</th><th>From</th><th>Campaign</th><th>Subject</th><th>Stage</th><th>Follow up</th></tr></thead>
+      <tbody id="rows"></tbody>
+    </table>
+  </div>
+
+  <div class="panel" id="detail" hidden>
+    <h2 id="dTitle"></h2>
+    <p class="hint" id="dMeta"></p>
+    <pre id="dBody"></pre>
+    <div class="row">
+      <label>Stage <select id="dStage"></select></label>
+      <label>Follow up on <input type="date" id="dDate"></label>
+      <label style="flex:1">Note <input id="dNote" maxlength="5000" style="width:100%;box-sizing:border-box"></label>
+      <button id="dSave">Save</button>
+    </div>
+    <p class="hint" id="dInfo"></p>
+    <p class="hint" id="dHistory"></p>
+  </div>
+</main>
+<script>
+const $ = (id) => document.getElementById(id);
+const STAGES = { new: 'New', interested: 'Interested', needs_call: 'Needs a call', quote_sent: 'Quote sent', won: 'Won', declined: 'Declined', done: 'Done' };
+let stage = '';
+let selected = null;
+
+async function api(method, path, body) {
+  const res = await fetch('/api' + path, { method, headers: body ? { 'Content-Type': 'application/json' } : {}, body: body ? JSON.stringify(body) : undefined });
+  const json = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    const details = json.details && Object.keys(json.details).length ? ': ' + Object.entries(json.details).map(([k, v]) => `${k} ${v}`).join(', ') : '';
+    throw new Error((json.error || `Request failed (${res.status})`) + details);
+  }
+  return json;
+}
+async function guarded(fn) { $('message').textContent = ''; try { await fn(); } catch (e) { $('message').textContent = e.message; } }
+function cell(tr, text) { tr.insertCell().textContent = text ?? ''; }
+function option(select, value, label) { const o = document.createElement('option'); o.value = value; o.textContent = label; select.append(o); }
+
+async function load() {
+  const q = new URLSearchParams();
+  if (stage) q.set('stage', stage);
+  if ($('fCampaign').value) q.set('campaign_id', $('fCampaign').value);
+  if ($('fDue').checked) q.set('due', '1');
+  const res = await api('GET', '/replies?' + q);
+
+  const chips = $('chips');
+  chips.replaceChildren();
+  const chip = (key, label) => {
+    const c = document.createElement('span');
+    c.className = 'chip' + (stage === key ? ' on' : '');
+    c.textContent = label;
+    c.addEventListener('click', () => { stage = key; guarded(load); });
+    chips.append(c);
+  };
+  chip('', 'All');
+  for (const [k, label] of Object.entries(STAGES)) chip(k, `${label} (${res.meta.stages[k]})`);
+
+  $('syncInfo').textContent = res.meta.sync.map((s) => s.last_run_at
+    ? `${s.email}: checked ${s.last_run_at} UTC, ${s.last_stored} new, ${s.last_unknown} from unknown senders ignored${s.last_error ? ' – ERROR: ' + s.last_error : ''}`
+    : `${s.email}: not checked yet`).join(' · ');
+
+  const body = $('rows');
+  body.replaceChildren();
+  $('empty').hidden = res.data.length > 0;
+  $('table').hidden = res.data.length === 0;
+  for (const r of res.data) {
+    const tr = body.insertRow();
+    tr.className = 'item' + (r.id === selected ? ' sel' : '');
+    cell(tr, r.received_at);
+    cell(tr, `${r.first_name} ${r.last_name} (${r.company})`);
+    cell(tr, r.campaign || '');
+    cell(tr, r.subject);
+    cell(tr, STAGES[r.stage]);
+    cell(tr, r.next_followup || '');
+    tr.addEventListener('click', () => guarded(() => open(r.id)));
+  }
+}
+
+async function open(id) {
+  const r = (await api('GET', '/replies/' + id)).data;
+  selected = id;
+  $('detail').hidden = false;
+  $('dTitle').textContent = r.subject || '(no subject)';
+  $('dMeta').textContent = `${r.first_name} ${r.last_name}, ${r.company} <${r.from_email}> · ${r.received_at} UTC${r.campaign ? ' · ' + r.campaign : ''}`;
+  $('dBody').textContent = r.body_text || r.preview;
+  const s = $('dStage');
+  s.replaceChildren();
+  for (const [k, label] of Object.entries(STAGES)) option(s, k, label);
+  s.value = r.stage;
+  $('dDate').value = r.next_followup || '';
+  $('dNote').value = r.note || '';
+  $('dInfo').textContent = '';
+  $('dHistory').textContent = r.history.length ? 'History: ' + r.history.map((h) => `${h.old_stage} → ${h.new_stage} by ${h.changed_by} (${h.changed_at})`).join('; ') : '';
+  await load();
+}
+
+$('dSave').addEventListener('click', () => guarded(async () => {
+  await api('PUT', '/replies/' + selected, { stage: $('dStage').value, next_followup: $('dDate').value, note: $('dNote').value });
+  $('dInfo').textContent = 'Saved.';
+  await open(selected);
+  $('dInfo').textContent = 'Saved.';
+}));
+$('sync').addEventListener('click', () => guarded(async () => {
+  $('sync').disabled = true;
+  try {
+    const r = (await api('POST', '/replies/sync', {})).data;
+    $('message').textContent = r.error ? r.error : '';
+    await load();
+  } finally { $('sync').disabled = false; }
+}));
+$('fCampaign').addEventListener('change', () => guarded(load));
+$('fDue').addEventListener('change', () => guarded(load));
+
+guarded(async () => {
+  for (const c of (await api('GET', '/campaigns')).data) option($('fCampaign'), c.id, c.name);
+  await load();
+});
+</script>
+<script src="/auth.js"></script>
+</body>
+</html>

@@ -184,4 +184,28 @@ check "products preview" 200 POST "/api/campaigns/$campaign_id/message/preview" 
 grep -q "<li>Mail &lt;b&gt;page&lt;/b&gt; – kr 2 500</li>" "$BODY" && echo "PASS products listed and escaped" || { echo "FAIL products in mail: $(cat "$BODY")"; fail=1; }
 code=$(curl -s -o "$BODY" -w '%{http_code}' "$BASE/reply?t=00000000000000000000000000000000&c=$send_id"); [ "$code" = 200 ] && grep -q "Nothing you enter is saved" "$BODY" && echo "PASS test link opens preview" || { echo "FAIL test link $code"; fail=1; }
 code=$(curl -s -o "$BODY" -w '%{http_code}' -X POST -d "t=00000000000000000000000000000000" -d "c=$send_id" -d "comment=x" "$BASE/reply"); grep -q "nothing was saved" "$BODY" && echo "PASS test link saves nothing" || { echo "FAIL test post $code"; fail=1; }
+
+# Replies (messages are injected as Graph resources; the live fetch needs Microsoft)
+docker compose exec -T web php -r 'require "src/bootstrap.php";
+$msgs = [
+ ["id"=>"smoke-$argv[2]-1","subject"=>"Re: Hei","from"=>["emailAddress"=>["address"=>strtoupper($argv[1])]],"receivedDateTime"=>gmdate("Y-m-d\\TH:i:s\\Z"),"bodyPreview"=>"Interested","body"=>["content"=>"Interested <script>x</script>"]],
+ ["id"=>"smoke-$argv[2]-2","subject"=>"Spam","from"=>["emailAddress"=>["address"=>"stranger-$argv[2]@example.org"]],"receivedDateTime"=>gmdate("Y-m-d\\TH:i:s\\Z"),"bodyPreview"=>"x","body"=>["content"=>"x"]],
+];
+$mb = (int) Mailings\Database::connect()->query("SELECT id FROM mailboxes LIMIT 1")->fetchColumn();
+$a = (new Mailings\Mail\Replies())->store($mb, "me@example.com", $msgs);
+$b = (new Mailings\Mail\Replies())->store($mb, "me@example.com", $msgs);
+echo $a["stored"], $a["unknown"], $b["stored"];' -- "send1-$suffix@example.com" "$suffix" > "$BODY"
+[ "$(cat "$BODY")" = "110" ] && echo "PASS reply stored once, unknown sender ignored" || { echo "FAIL reply store: $(cat "$BODY")"; fail=1; }
+check "list replies" 200 GET "/api/replies?campaign_id=$send_id"
+grep -q "Re: Hei" "$BODY" && grep -q '"new":' "$BODY" && echo "PASS reply listed and matched to campaign" || { echo "FAIL reply list: $(cat "$BODY")"; fail=1; }
+reply_id=$(php -r '$d=json_decode(file_get_contents($argv[1]),true); echo $d["data"][0]["id"];' "$BODY")
+check "get reply" 200 GET "/api/replies/$reply_id"
+check "reply bad stage" 422 PUT "/api/replies/$reply_id" '{"stage":"nope"}'
+check "reply bad date" 422 PUT "/api/replies/$reply_id" '{"next_followup":"2026-13-45"}'
+COOKIES="$VIEWER_JAR" check "viewer cannot change stage" 403 PUT "/api/replies/$reply_id" '{"stage":"interested"}'
+check "set stage" 200 PUT "/api/replies/$reply_id" '{"stage":"needs_call","next_followup":"2020-01-01","note":"Call Monday"}'
+grep -q '"stage":"needs_call"' "$BODY" && grep -q '"new_stage":"needs_call"' "$BODY" && echo "PASS stage saved with history" || { echo "FAIL stage: $(cat "$BODY")"; fail=1; }
+check "due filter" 200 GET "/api/replies?due=1"
+grep -q "Re: Hei" "$BODY" && echo "PASS follow-up due filter" || { echo "FAIL due: $(cat "$BODY")"; fail=1; }
+check "sync in dry run" 200 POST /api/replies/sync '{}'
 exit $fail

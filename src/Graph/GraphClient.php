@@ -66,6 +66,26 @@ final class GraphClient
         return $response;
     }
 
+    /**
+     * GET with extra headers; accepts a path or an absolute @odata.nextLink (which must stay on graph.microsoft.com).
+     *
+     * @param list<string> $headers
+     * @return array<string,mixed>
+     */
+    public function getPage(string $token, string $pathOrUrl, array $headers = []): array
+    {
+        $url = str_starts_with($pathOrUrl, 'https://') ? $pathOrUrl : self::GRAPH . $pathOrUrl;
+        if (!str_starts_with($url, 'https://graph.microsoft.com/')) {
+            throw new GraphException('Refusing to follow a link outside Microsoft Graph');
+        }
+        [$status, $response] = $this->requestRaw('GET', $url, array_merge(['Authorization: Bearer ' . $token], $headers));
+        if ($status >= 400 || isset($response['error'])) {
+            $text = $this->describe($response, 'The Graph request failed (HTTP ' . $status . ')');
+            throw new GraphException($status === 403 ? $text . ' (check Mail.Read permission and the Application Access Policy for this mailbox)' : $text, $status);
+        }
+        return $response;
+    }
+
     /** Application permissions granted to the app, read from the token's roles claim. @return list<string> */
     private function rolesFrom(string $token): array
     {

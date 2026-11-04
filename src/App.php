@@ -18,6 +18,7 @@ use Mailings\Http\MessageController;
 use Mailings\Http\SendController;
 use Mailings\Http\SettingsController;
 use Mailings\Http\ReplyController;
+use Mailings\Http\ReplyInboxController;
 use Mailings\Http\ResponseController;
 use Mailings\Http\UnsubscribeController;
 use Mailings\Http\UserController;
@@ -81,6 +82,7 @@ final class App
         $send = new SendController($campaigns);
         $unsubscribe = new UnsubscribeController();
         $reply = new ReplyController();
+        $inbox = new ReplyInboxController();
         $responses = new ResponseController();
 
         $recordActions = new RecordActions($companies, $contacts);
@@ -149,6 +151,10 @@ final class App
         $router->add('GET', '/api/campaigns/{id}/responses', [$responses, 'list']);
         $router->add('POST', '/api/campaigns/{id}/responses/{response_id}/apply', [$responses, 'apply']);
         $router->add('POST', '/api/campaigns/{id}/responses/{response_id}/dismiss', [$responses, 'dismiss']);
+        $router->add('GET', '/api/replies', [$inbox, 'list']);
+        $router->add('POST', '/api/replies/sync', [$inbox, 'sync']);
+        $router->add('GET', '/api/replies/{id}', [$inbox, 'get']);
+        $router->add('PUT', '/api/replies/{id}', [$inbox, 'update']);
         $router->add('GET', '/api/groups', [$groups, 'list']);
         $router->add('POST', '/api/groups', [$groupsCrud, 'create']);
         $router->add('GET', '/api/groups/{id}', [$groupsCrud, 'get']);
