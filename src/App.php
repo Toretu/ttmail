@@ -17,6 +17,8 @@ use Mailings\Http\RecipientController;
 use Mailings\Http\MessageController;
 use Mailings\Http\SendController;
 use Mailings\Http\SettingsController;
+use Mailings\Http\ReplyController;
+use Mailings\Http\ResponseController;
 use Mailings\Http\UnsubscribeController;
 use Mailings\Http\UserController;
 use Mailings\Http\Router;
@@ -78,6 +80,8 @@ final class App
         $message = new MessageController($campaigns);
         $send = new SendController($campaigns);
         $unsubscribe = new UnsubscribeController();
+        $reply = new ReplyController();
+        $responses = new ResponseController();
 
         $recordActions = new RecordActions($companies, $contacts);
         $mailboxes = new CrudController('mailboxes', Schema::mailboxRules(), ['display_name', 'email'], ['is_active'], 'Mailbox');
@@ -140,6 +144,11 @@ final class App
         $router->add('POST', '/api/campaigns/{id}/send/retry-failed', [$send, 'retryFailed']);
         $router->add('GET', '/unsubscribe', [$unsubscribe, 'show']);
         $router->add('POST', '/unsubscribe', [$unsubscribe, 'confirm']);
+        $router->add('GET', '/reply', [$reply, 'show']);
+        $router->add('POST', '/reply', [$reply, 'submit']);
+        $router->add('GET', '/api/campaigns/{id}/responses', [$responses, 'list']);
+        $router->add('POST', '/api/campaigns/{id}/responses/{response_id}/apply', [$responses, 'apply']);
+        $router->add('POST', '/api/campaigns/{id}/responses/{response_id}/dismiss', [$responses, 'dismiss']);
         $router->add('GET', '/api/groups', [$groups, 'list']);
         $router->add('POST', '/api/groups', [$groupsCrud, 'create']);
         $router->add('GET', '/api/groups/{id}', [$groupsCrud, 'get']);

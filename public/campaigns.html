@@ -139,6 +139,16 @@
       </table>
     </div>
 
+    <div class="panel" id="responsePanel">
+      <h2>Answers from recipients</h2>
+      <p class="hint">Recipients can open a personal link (put <code>{{details_link}}</code> in the message) to correct their details and pick products. Nothing changes until you apply it.</p>
+      <p id="aEmpty" class="hint">No answers yet.</p>
+      <table id="aTable" hidden>
+        <thead><tr><th>Who</th><th>Wants</th><th>Corrections</th><th>Message</th><th></th></tr></thead>
+        <tbody id="aRows"></tbody>
+      </table>
+    </div>
+
     <div class="panel danger">
       <h2>Delete campaign</h2>
       <p class="hint">This permanently deletes the campaign, its products and all registered sales. Companies are not affected. Type the campaign name to confirm.</p>
@@ -268,6 +278,7 @@ async function loadDetail() {
   await loadMessage();
   await loadRecipients();
   await loadSend();
+  await loadResponses();
 }
 
 
@@ -400,6 +411,32 @@ async function loadRecipients() {
       remove.addEventListener('click', () => guarded(async () => { await api('DELETE', `/campaigns/${current}/recipients/${r.contact_id}`); await loadRecipients(); }));
       tr.insertCell().append(remove);
     }
+  }
+}
+
+async function loadResponses() {
+  const rows = await api('GET', `/campaigns/${current}/responses`);
+  const body = $('aRows');
+  body.replaceChildren();
+  $('aEmpty').hidden = rows.length > 0;
+  $('aTable').hidden = rows.length === 0;
+  for (const r of rows) {
+    const tr = body.insertRow();
+    cell(tr, `${r.contact} (${r.company}) ${r.email}`);
+    cell(tr, r.products.join(', '));
+    cell(tr, r.changes.map((c) => `${c.field}: ${c.old ?? '–'} → ${c.new ?? '–'}`).join('\n')).style.whiteSpace = 'pre-line';
+    cell(tr, r.comment || '');
+    const td = tr.insertCell();
+    if (r.status !== 'new') { td.textContent = r.status; continue; }
+    const act = (label, path, cls) => {
+      const b = document.createElement('button');
+      b.className = cls + ' small';
+      b.textContent = label;
+      b.addEventListener('click', () => guarded(async () => { await api('POST', `/campaigns/${current}/responses/${r.id}/${path}`, {}); await loadResponses(); }));
+      td.append(b, ' ');
+    };
+    if (r.changes.length) act('Apply corrections', 'apply', '');
+    act('Mark handled', 'dismiss', 'secondary');
   }
 }
 

@@ -12,6 +12,7 @@ final class Template
         'full_name' => 'Contact full name',
         'company' => 'Company name',
         'campaign' => 'Campaign name',
+        'details_link' => 'Personal link to update details and choose products',
     ];
 
     /** @return list<string> placeholders used in the text that do not exist */
@@ -54,6 +55,10 @@ final class Template
         }
         return (string) preg_replace_callback('/\{\{\s*([^{}]*?)\s*\}\}/', static function (array $m) use ($vars, $escape): string {
             $value = $vars[$m[1]] ?? '';
+            if ($escape && $m[1] === 'details_link' && $value !== '') {
+                $url = htmlspecialchars($value, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
+                return "<a href=\"{$url}\">Oppdater opplysninger og velg produkter / Update your details and choose products</a>";
+            }
             return $escape ? htmlspecialchars($value, ENT_NOQUOTES | ENT_SUBSTITUTE, 'UTF-8') : $value;
         }, $text);
     }

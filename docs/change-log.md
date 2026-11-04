@@ -35,3 +35,9 @@ All meaningful implementation, configuration, and documentation changes must be 
 - Added contact groups (page + API), campaign recipients with preview and automatic exclusion of unsubscribed/inactive contacts (migration 005, docs/groups-and-recipients.md). Nothing is sent yet.
 - Added campaign message (sender mailbox, subject, body with placeholders), preview, test send via Graph sendMail, and a public per-contact unsubscribe page (migration 006, docs/campaign-message.md). JSON bodies may now be an empty object. Nothing is sent to recipients yet.
 - Added approval and background sending: test mail required, typed recipient count, worker bin/send-queue.php (cron, 10 mails/min), claim-before-send, re-check of unsubscribes, automatic pause on Microsoft errors, pause/resume/retry, dry-run mode for development, campaign delete blocked once mail is sent (migration 007, docs/sending.md).
+
+## 2026-11-04 (details link)
+
+- Added `{{details_link}}`: a personal public page where recipients correct their details, pick campaign products and leave a message.
+- Added migration 008 (`campaign_responses`), `ReplyController`, `ResponseController` and the "Answers from recipients" panel. Answers are reviewed by an editor before master data changes.
+- Smoke test extended to 124 checks.

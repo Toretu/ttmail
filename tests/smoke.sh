@@ -157,4 +157,25 @@ $WORKER >/dev/null 2>&1
 check "status after second run" 200 GET "/api/campaigns/$send_id/send"
 grep -q '"sent":2' "$BODY" && echo "PASS no duplicate sends" || { echo "FAIL duplicate: $(cat "$BODY")"; fail=1; }
 check "cannot delete mailed campaign" 409 DELETE "/api/campaigns/$send_id" "{\"confirm_name\":\"Send campaign $suffix\"}"
+
+# Public details page (personal link) and review
+check "reply product" 201 POST "/api/campaigns/$send_id/products" '{"name":"Half page","price":"1500"}'
+reply_product=$(json_id)
+tok=$(docker compose exec -T web php -r 'require "src/bootstrap.php"; echo Mailings\Mail\Unsubscribe::tokenFor((int) $argv[1]);' -- "$send_contact_1")
+code=$(curl -s -o "$BODY" -w '%{http_code}' "$BASE/reply?t=$tok&c=$send_id"); [ "$code" = 200 ] && grep -q "Half page" "$BODY" && echo "PASS reply page shows products" || { echo "FAIL reply page $code"; fail=1; }
+code=$(curl -s -o /dev/null -w '%{http_code}' "$BASE/reply?t=$tok&c=999999"); [ "$code" = 404 ] && echo "PASS reply wrong campaign 404" || { echo "FAIL reply wrong campaign $code"; fail=1; }
+code=$(curl -s -o /dev/null -w '%{http_code}' "$BASE/reply?t=bad&c=$send_id"); [ "$code" = 404 ] && echo "PASS reply bad token 404" || { echo "FAIL reply bad token $code"; fail=1; }
+code=$(curl -s -o "$BODY" -w '%{http_code}' -X POST --data-urlencode "t=$tok" -d "c=$send_id" --data-urlencode "company_city=Oslo $suffix" -d "contact_first_name=S1" -d "contact_last_name=T" -d "products[]=$reply_product" -d "products[]=999999" --data-urlencode "comment=<b>hi</b>" "$BASE/reply")
+[ "$code" = 200 ] && grep -q "Thank you" "$BODY" && echo "PASS reply submitted" || { echo "FAIL reply submit $code"; fail=1; }
+check "list responses" 200 GET "/api/campaigns/$send_id/responses"
+grep -q "Oslo $suffix" "$BODY" && grep -q "Half page" "$BODY" && echo "PASS response listed" || { echo "FAIL responses: $(cat "$BODY")"; fail=1; }
+check "company unchanged before apply" 200 GET "/api/companies/$send_company"
+grep -q "Oslo $suffix" "$BODY" && { echo "FAIL city changed before apply"; fail=1; } || echo "PASS master data untouched"
+check "list responses again" 200 GET "/api/campaigns/$send_id/responses"
+resp_id=$(php -r '$d=json_decode(file_get_contents($argv[1]),true); echo $d["data"][0]["id"];' "$BODY")
+COOKIES="$VIEWER_JAR" check "viewer cannot apply" 403 POST "/api/campaigns/$send_id/responses/$resp_id/apply" '{}'
+check "apply response" 200 POST "/api/campaigns/$send_id/responses/$resp_id/apply" '{}'
+check "company after apply" 200 GET "/api/companies/$send_company"
+grep -q "Oslo $suffix" "$BODY" && echo "PASS corrections applied" || { echo "FAIL apply: $(cat "$BODY")"; fail=1; }
+code=$(curl -s -o "$BODY" -w '%{http_code}' -X POST --data-urlencode "t=$tok" -d "c=$send_id" -d "contact_first_name=" "$BASE/reply"); grep -q "must not be empty\|first_name" "$BODY" && echo "PASS reply validation" || { echo "FAIL reply validation $code"; fail=1; }
 exit $fail

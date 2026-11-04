@@ -31,3 +31,24 @@ Once any recipient has been sent mail, the message can no longer be changed.
 | `POST /api/campaigns/{id}/message/preview` | Optional body `{"contact_id":N}` |
 | `POST /api/campaigns/{id}/message/test` | Body `{"to":"address"}` |
 | `GET/POST /unsubscribe` | Public unsubscribe page |
+
+## Personal details link
+
+Put `{{details_link}}` in the message text. It becomes a link, unique per contact and campaign (it reuses the contact's token), to a public page `/reply` where the recipient can:
+
+- correct company details (org. number, billing address, postal code, city, website) and their own (name, role, phone);
+- tick the campaign's products they are interested in (not a binding order);
+- leave a message.
+
+Rules:
+
+- The link works only for contacts that were actually sent this campaign, not for unsubscribed contacts, and shows nothing for closed campaigns. The preview and test mail link is inactive.
+- Answers are stored in `campaign_responses` (one per contact and campaign; a new answer replaces the old). **Master data is never changed by the public page.** Editors review them in the campaign's "Answers from recipients" panel and press *Apply corrections* or *Mark handled*.
+- Only the whitelisted fields can be changed. The email address cannot; the recipient writes it in the message.
+- Anyone who gets the mail (for example by forwarding) can use the link, like the unsubscribe link, so it can only propose changes.
+
+| Endpoint | Purpose |
+|---|---|
+| `GET/POST /reply?t=TOKEN&c=CAMPAIGN` | Public page (no login) |
+| `GET /api/campaigns/{id}/responses` | List answers with old → new values |
+| `POST /api/campaigns/{id}/responses/{rid}/apply` / `dismiss` | Editor actions |

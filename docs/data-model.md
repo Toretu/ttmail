@@ -68,3 +68,5 @@ Mailbox ID, display name, Microsoft 365 email address, Graph sender identity, ac
 - One contact can participate in many campaigns.
 - One opportunity can have many activities and stage-history entries.
 - One or more approved mailboxes can be used by campaigns.
+
+Migration 008: `campaign_responses` (campaign_id, contact_id, `changes` JSON, `product_ids` JSON, comment, status new/applied/dismissed), unique per contact and campaign.
