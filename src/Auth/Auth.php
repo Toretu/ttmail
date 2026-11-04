@@ -139,9 +139,9 @@ final class Auth
     /** Only same-site relative paths are accepted as a post-login destination. */
     public static function safeNext(?string $next): string
     {
-        if ($next !== null && preg_match('#^/(?!/)[A-Za-z0-9_./?=&%#-]*$#', $next) === 1 && !str_starts_with($next, '/auth/')) {
+        if ($next !== null && preg_match('~^/(?!/)[A-Za-z0-9_./?=&%#-]*$~', $next) === 1 && !str_starts_with($next, '/auth/')) {
             return $next;
         }
-        return '/app/';
+        return '/campaigns.html';
     }
 }

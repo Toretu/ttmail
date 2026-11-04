@@ -27,7 +27,7 @@
 </div>
 <script>
 const params = new URLSearchParams(location.search);
-const next = params.get('next') || '/app/';
+const next = params.get('next') || '/campaigns.html';
 fetch('/api/auth/config').then((r) => r.json()).then(({ data }) => {
   const link = document.getElementById('microsoft');
   if (data.microsoft) {
@@ -41,7 +41,7 @@ fetch('/api/auth/config').then((r) => r.json()).then(({ data }) => {
 
 document.getElementById('dev').addEventListener('click', async () => {
   const res = await fetch('/auth/dev-login', { method: 'POST' });
-  if (res.ok) location.href = next.startsWith('/') && !next.startsWith('//') ? next : '/app/';
+  if (res.ok) location.href = next.startsWith('/') && !next.startsWith('//') ? next : '/campaigns.html';
   else document.getElementById('message').textContent = 'Development login is not available.';
 });
 </script>

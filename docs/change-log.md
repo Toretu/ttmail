@@ -31,3 +31,4 @@ All meaningful implementation, configuration, and documentation changes must be 
 - Added Microsoft 365 sign-in (OIDC + PKCE), a users table with viewer/editor/admin roles enforced on every API call, same-origin checks, a login page, a signed-in user bar on all pages, user management in Settings, and a local development login. `/api/health` is the only public data endpoint. Smoke test now signs in and covers roles.
 - Config now reads the project `.env` file itself when real environment variables are not set, so `php bin/migrate.php` works on a plain server without Docker.
 - `/` now redirects to the campaigns page (which sends signed-out users to the login page).
+- Fixed post-login redirect regex (invalid delimiter on some PHP builds); default landing page is /campaigns.html. Documented required PHP extensions (curl).
