@@ -89,10 +89,38 @@ final class GraphClient
     }
 
     /**
+     * Sends one message as the given mailbox (needs the Mail.Send application permission). Graph answers 202 with no body.
+     *
+     * @param array<string,mixed> $message Graph message resource
+     */
+    public function sendMail(string $token, string $mailbox, array $message): void
+    {
+        [$status, $response] = $this->requestRaw(
+            'POST',
+            self::GRAPH . '/users/' . rawurlencode($mailbox) . '/sendMail',
+            ['Authorization: Bearer ' . $token, 'Content-Type: application/json'],
+            json_encode(['message' => $message, 'saveToSentItems' => true], JSON_THROW_ON_ERROR)
+        );
+        if ($status !== 202) {
+            $text = $this->describe($response, 'Microsoft refused the message (HTTP ' . $status . ')');
+            throw new GraphException($status === 403 ? $text . ' (check Mail.Send permission and the Application Access Policy for this mailbox)' : $text);
+        }
+    }
+
+    /**
      * @param list<string> $headers
      * @return array<string,mixed>
      */
     public function request(string $method, string $url, array $headers = [], ?string $body = null): array
+    {
+        return $this->requestRaw($method, $url, $headers, $body)[1];
+    }
+
+    /**
+     * @param list<string> $headers
+     * @return array{int, array<string,mixed>}
+     */
+    private function requestRaw(string $method, string $url, array $headers = [], ?string $body = null): array
     {
         $curl = curl_init($url);
         $options = [
@@ -108,6 +136,7 @@ final class GraphClient
         }
         curl_setopt_array($curl, $options);
         $raw = curl_exec($curl);
+        $status = (int) curl_getinfo($curl, CURLINFO_RESPONSE_CODE);
         if ($raw === false) {
             $message = curl_error($curl);
             curl_close($curl);
@@ -115,6 +144,6 @@ final class GraphClient
         }
         curl_close($curl);
         $decoded = json_decode((string) $raw, true);
-        return is_array($decoded) ? $decoded : [];
+        return [$status, is_array($decoded) ? $decoded : []];
     }
 }

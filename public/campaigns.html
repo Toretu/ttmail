@@ -21,6 +21,7 @@
   .danger { border: 1px solid #e3b4b4; }
   button.delete { background: #b42318; }
   button.secondary { background: #e5e1f7; color: #2b1d6b; }
+  textarea { border: 1px solid #bbb; border-radius: 4px; }
   button.small { padding: 3px 8px; font-size: 13px; }
   button:disabled { opacity: .5; cursor: not-allowed; }
   .soldout { color: #a11; font-weight: 600; }
@@ -79,6 +80,25 @@
         <tbody id="saleRows"></tbody>
       </table>
     </div>
+    <div class="panel">
+      <h2>Message</h2>
+      <p class="hint">The email sent to every recipient, one message each. An unsubscribe line is added automatically at the bottom. Placeholders: <span id="placeholders"></span></p>
+      <div class="row">
+        <label>Send from <select id="mMailbox"></select></label>
+        <label style="flex:1">Subject <input id="mSubject" style="width:100%;box-sizing:border-box" maxlength="255"></label>
+      </div>
+      <label style="margin-top:10px">Text <textarea id="mBody" rows="10" style="width:100%;box-sizing:border-box;font:inherit;padding:8px"></textarea></label>
+      <p id="mLocked" class="hint" hidden>Mail has already been sent, so the message is locked.</p>
+      <div class="row" style="margin-top:10px">
+        <button id="mSave">Save message</button>
+        <button id="mPreview" class="secondary">Preview</button>
+        <label>Send test to <input id="mTo" size="28" placeholder="your email"></label>
+        <button id="mTest" class="secondary">Send test</button>
+      </div>
+      <p id="mInfo" class="hint"></p>
+      <iframe id="mFrame" sandbox="" title="Preview" hidden style="width:100%;height:320px;border:1px solid #ddd;border-radius:8px;background:#fff;margin-top:8px"></iframe>
+    </div>
+
     <div class="panel">
       <h2>Recipients</h2>
       <p class="hint">Choose who this campaign is sent to. Unsubscribed contacts and companies that are inactive or marked do-not-contact are never added. Nothing is sent from here.</p>
@@ -223,8 +243,47 @@ async function loadDetail() {
     }));
     row.insertCell().append(select);
   }
+  await loadMessage();
   await loadRecipients();
 }
+
+
+async function loadMessage() {
+  const [m, mailboxes, me] = await Promise.all([api('GET', `/campaigns/${current}/message`), api('GET', '/mailboxes'), api('GET', '/me')]);
+  const select = $('mMailbox');
+  select.replaceChildren();
+  option(select, '', '— choose —');
+  mailboxes.filter((b) => Number(b.is_active)).forEach((b) => option(select, b.id, `${b.display_name} <${b.email}>`));
+  select.value = m.mailbox_id === null ? '' : String(m.mailbox_id);
+  $('mSubject').value = m.subject;
+  $('mBody').value = m.body;
+  $('placeholders').textContent = Object.keys(m.placeholders).map((k) => `{{${k}}}`).join('  ');
+  if (!$('mTo').value && me.email && me.email.includes('@') && !me.email.endsWith('@localhost')) $('mTo').value = me.email;
+  for (const id of ['mMailbox', 'mSubject', 'mBody', 'mSave']) $(id).disabled = m.locked;
+  $('mLocked').hidden = !m.locked;
+  $('mInfo').textContent = '';
+  $('mFrame').hidden = true;
+}
+
+async function saveMessage() {
+  await api('PUT', `/campaigns/${current}/message`, { mailbox_id: $('mMailbox').value, subject: $('mSubject').value, body: $('mBody').value });
+  $('mInfo').textContent = 'Message saved.';
+}
+
+$('mSave').addEventListener('click', () => guarded(saveMessage));
+$('mPreview').addEventListener('click', () => guarded(async () => {
+  await saveMessage();
+  const recipient = (await apiFull('GET', `/campaigns/${current}/recipients`)).data[0];
+  const p = await api('POST', `/campaigns/${current}/message/preview`, recipient ? { contact_id: recipient.contact_id } : {});
+  $('mFrame').srcdoc = p.html;
+  $('mFrame').hidden = false;
+  $('mInfo').textContent = `From ${p.from} · Subject: ${p.subject} · ${recipient ? `shown for ${recipient.first_name} ${recipient.last_name}` : 'shown with sample data (no recipients yet)'}`;
+}));
+$('mTest').addEventListener('click', () => guarded(async () => {
+  await saveMessage();
+  const r = await api('POST', `/campaigns/${current}/message/test`, { to: $('mTo').value });
+  $('mInfo').textContent = `Test sent from ${r.from} to ${r.sent_to}. The unsubscribe link in a test mail is inactive.`;
+}));
 
 const EXCLUSIONS = { unsubscribed: 'unsubscribed', company_inactive: 'inactive company', company_do_not_contact: 'company marked do-not-contact', invalid_email: 'invalid email' };
 

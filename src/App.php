@@ -14,7 +14,9 @@ use Mailings\Http\Json;
 use Mailings\Http\RecordActions;
 use Mailings\Http\GroupController;
 use Mailings\Http\RecipientController;
+use Mailings\Http\MessageController;
 use Mailings\Http\SettingsController;
+use Mailings\Http\UnsubscribeController;
 use Mailings\Http\UserController;
 use Mailings\Http\Router;
 
@@ -72,6 +74,8 @@ final class App
         $groupsCrud = new CrudController('contact_groups', Schema::groupRules(), ['name'], ['is_active'], 'Group');
         $groups = new GroupController($groupsCrud);
         $recipients = new RecipientController($campaigns);
+        $message = new MessageController($campaigns);
+        $unsubscribe = new UnsubscribeController();
 
         $recordActions = new RecordActions($companies, $contacts);
         $mailboxes = new CrudController('mailboxes', Schema::mailboxRules(), ['display_name', 'email'], ['is_active'], 'Mailbox');
@@ -123,6 +127,12 @@ final class App
         $router->add('GET', '/api/campaigns/{id}/sales', [$campaignActions, 'sales']);
         $router->add('POST', '/api/campaigns/{id}/sales', [$campaignActions, 'createSale']);
         $router->add('PUT', '/api/sales/{id}', [$campaignActions, 'updateSale']);
+        $router->add('GET', '/api/campaigns/{id}/message', [$message, 'get']);
+        $router->add('PUT', '/api/campaigns/{id}/message', [$message, 'save']);
+        $router->add('POST', '/api/campaigns/{id}/message/preview', [$message, 'preview']);
+        $router->add('POST', '/api/campaigns/{id}/message/test', [$message, 'test']);
+        $router->add('GET', '/unsubscribe', [$unsubscribe, 'show']);
+        $router->add('POST', '/unsubscribe', [$unsubscribe, 'confirm']);
         $router->add('GET', '/api/groups', [$groups, 'list']);
         $router->add('POST', '/api/groups', [$groupsCrud, 'create']);
         $router->add('GET', '/api/groups/{id}', [$groupsCrud, 'get']);

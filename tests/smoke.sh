@@ -99,4 +99,26 @@ check "remove recipient twice" 404 DELETE "/api/campaigns/$campaign_id/recipient
 check "remove member" 200 DELETE "/api/groups/$group_id/members/$good_contact"
 check "delete group wrong name" 422 DELETE "/api/groups/$group_id" '{"confirm_name":"x"}'
 check "delete group" 200 DELETE "/api/groups/$group_id" "{\"confirm_name\":\"Smoke group $suffix\"}"
+
+# Message, preview, unsubscribe
+check "list mailboxes" 200 GET /api/mailboxes
+mailbox_id=$(php -r '$d=json_decode(file_get_contents($argv[1]),true)["data"]; echo $d[0]["id"];' "$BODY")
+check "preview needs message" 422 POST "/api/campaigns/$campaign_id/message/preview"
+check "unknown placeholder" 422 PUT "/api/campaigns/$campaign_id/message" "{\"mailbox_id\":$mailbox_id,\"subject\":\"Hi {{nope}}\",\"body\":\"x\"}"
+check "unknown mailbox" 422 PUT "/api/campaigns/$campaign_id/message" '{"mailbox_id":999999,"subject":"s","body":"b"}'
+check "save message" 200 PUT "/api/campaigns/$campaign_id/message" "{\"mailbox_id\":$mailbox_id,\"subject\":\"Hei {{first_name}}\",\"body\":\"Hei {{ first_name }} i {{company}} <b>x</b>\\nKatalog\"}"
+check "preview sample" 200 POST "/api/campaigns/$campaign_id/message/preview"
+grep -q 'Hei Kari' "$BODY" && grep -q '&lt;b&gt;' "$BODY" && echo "PASS preview escapes html" || { echo "FAIL preview: $(cat "$BODY")"; fail=1; }
+check "preview contact" 200 POST "/api/campaigns/$campaign_id/message/preview" "{\"contact_id\":$good_contact}"
+unsub_url=$(php -r 'preg_match("#unsubscribe\?t=([0-9a-f]{32})#", file_get_contents($argv[1]), $m); echo $m[1] ?? "";' "$BODY")
+[ -n "$unsub_url" ] && echo "PASS unsubscribe link in message" || { echo "FAIL no unsubscribe link"; fail=1; }
+code=$(curl -s -o "$BODY" -w '%{http_code}' "$BASE/unsubscribe?t=$unsub_url"); [ "$code" = 200 ] && grep -q "<form" "$BODY" && echo "PASS unsubscribe page (no login)" || { echo "FAIL unsubscribe page $code"; fail=1; }
+check "contact still subscribed after GET" 200 GET "/api/contacts/$good_contact"
+grep -q '"unsubscribed_at":null' "$BODY" && echo "PASS GET does not unsubscribe" || { echo "FAIL GET unsubscribed"; fail=1; }
+code=$(curl -s -o "$BODY" -w '%{http_code}' -X POST -d "t=$unsub_url" "$BASE/unsubscribe"); [ "$code" = 200 ] && echo "PASS unsubscribe confirm" || { echo "FAIL confirm $code"; fail=1; }
+check "contact unsubscribed" 200 GET "/api/contacts/$good_contact"
+grep -q '"consent_status":"withdrawn"' "$BODY" && echo "PASS unsubscribe recorded via link" || { echo "FAIL not recorded"; fail=1; }
+code=$(curl -s -o /dev/null -w '%{http_code}' "$BASE/unsubscribe?t=bad"); [ "$code" = 404 ] && echo "PASS bad token 404" || { echo "FAIL bad token $code"; fail=1; }
+check "test mail bad address" 422 POST "/api/campaigns/$campaign_id/message/test" '{"to":"nope"}'
+COOKIES="$VIEWER_JAR" check "viewer cannot send test" 403 POST "/api/campaigns/$campaign_id/message/test" '{"to":"a@example.com"}'
 exit $fail

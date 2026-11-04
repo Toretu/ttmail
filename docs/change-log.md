@@ -33,3 +33,4 @@ All meaningful implementation, configuration, and documentation changes must be 
 - `/` now redirects to the campaigns page (which sends signed-out users to the login page).
 - Fixed post-login redirect regex (invalid delimiter on some PHP builds); default landing page is /campaigns.html. Documented required PHP extensions (curl).
 - Added contact groups (page + API), campaign recipients with preview and automatic exclusion of unsubscribed/inactive contacts (migration 005, docs/groups-and-recipients.md). Nothing is sent yet.
+- Added campaign message (sender mailbox, subject, body with placeholders), preview, test send via Graph sendMail, and a public per-contact unsubscribe page (migration 006, docs/campaign-message.md). JSON bodies may now be an empty object. Nothing is sent to recipients yet.

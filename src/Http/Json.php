@@ -27,7 +27,7 @@ final class Json
         } catch (\JsonException) {
             throw new HttpException(400, 'Request body is not valid JSON');
         }
-        if (!is_array($data) || array_is_list($data)) {
+        if (!is_array($data) || ($data !== [] && array_is_list($data))) {
             throw new HttpException(400, 'Request body must be a JSON object');
         }
         return $data;
