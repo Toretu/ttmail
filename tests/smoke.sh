@@ -178,4 +178,8 @@ check "apply response" 200 POST "/api/campaigns/$send_id/responses/$resp_id/appl
 check "company after apply" 200 GET "/api/companies/$send_company"
 grep -q "Oslo $suffix" "$BODY" && echo "PASS corrections applied" || { echo "FAIL apply: $(cat "$BODY")"; fail=1; }
 code=$(curl -s -o "$BODY" -w '%{http_code}' -X POST --data-urlencode "t=$tok" -d "c=$send_id" -d "contact_first_name=" "$BASE/reply"); grep -q "must not be empty\|first_name" "$BODY" && echo "PASS reply validation" || { echo "FAIL reply validation $code"; fail=1; }
+check "products placeholder saved" 200 PUT "/api/campaigns/$campaign_id/message" "{\"mailbox_id\":$mailbox_id,\"subject\":\"S\",\"body\":\"Available:\\n{{products}}\"}"
+check "product for mail" 201 POST "/api/campaigns/$campaign_id/products" '{"name":"Mail <b>page</b>","price":"2500"}'
+check "products preview" 200 POST "/api/campaigns/$campaign_id/message/preview" '{}'
+grep -q "<li>Mail &lt;b&gt;page&lt;/b&gt; – kr 2 500</li>" "$BODY" && echo "PASS products listed and escaped" || { echo "FAIL products in mail: $(cat "$BODY")"; fail=1; }
 exit $fail

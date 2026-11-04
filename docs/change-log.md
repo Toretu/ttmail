@@ -41,3 +41,4 @@ All meaningful implementation, configuration, and documentation changes must be 
 - Added `{{details_link}}`: a personal public page where recipients correct their details, pick campaign products and leave a message.
 - Added migration 008 (`campaign_responses`), `ReplyController`, `ResponseController` and the "Answers from recipients" panel. Answers are reviewed by an editor before master data changes.
 - Smoke test extended to 124 checks.
+- Added `{{products}}` placeholder: the available products with prices are listed in the mail.

@@ -52,3 +52,7 @@ Rules:
 | `GET/POST /reply?t=TOKEN&c=CAMPAIGN` | Public page (no login) |
 | `GET /api/campaigns/{id}/responses` | List answers with old → new values |
 | `POST /api/campaigns/{id}/responses/{rid}/apply` / `dismiss` | Editor actions |
+
+## Product list in the mail
+
+`{{products}}` inserts a bullet list of the campaign's products with prices (and the description, if any), for example "Half page – kr 1 500". Products that are sold out are left out; sold and reserved quantities both count as taken. The list is built when each mail is sent, so later mails reflect sales made in the meantime. Use it together with `{{details_link}}` so recipients can choose.

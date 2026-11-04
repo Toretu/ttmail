@@ -12,6 +12,7 @@ final class Template
         'full_name' => 'Contact full name',
         'company' => 'Company name',
         'campaign' => 'Campaign name',
+        'products' => 'List of the products still available, with prices',
         'details_link' => 'Personal link to update details and choose products',
     ];
 
@@ -55,6 +56,10 @@ final class Template
         }
         return (string) preg_replace_callback('/\{\{\s*([^{}]*?)\s*\}\}/', static function (array $m) use ($vars, $escape): string {
             $value = $vars[$m[1]] ?? '';
+            if ($escape && $m[1] === 'products' && $value !== '') {
+                $items = array_map(static fn (string $l): string => '<li>' . htmlspecialchars($l, ENT_NOQUOTES | ENT_SUBSTITUTE, 'UTF-8') . '</li>', explode("\n", $value));
+                return '<ul style="margin:8px 0;padding-left:20px">' . implode('', $items) . '</ul>';
+            }
             if ($escape && $m[1] === 'details_link' && $value !== '') {
                 $url = htmlspecialchars($value, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
                 return "<a href=\"{$url}\">Oppdater opplysninger og velg produkter / Update your details and choose products</a>";
