@@ -105,5 +105,9 @@ Users and roles are managed in Settings → Users. See [security.md](security.md
 |---|---|
 | `MAIL_RATE_PER_MINUTE` | Messages per minute the worker sends (1–30, default 10). Exchange Online allows about 30 per minute per mailbox. |
 | `MAIL_DRY_RUN` | `1` logs mail instead of sending, only honoured when `APP_ENV=development`. Keep `0` in production. |
+| `REPLY_LINK_DAYS` | Days a personal details link (`{{details_link}}`) stays valid after sending (1–365, default 90). |
 
 The worker `bin/send-queue.php` must be run every minute from cron. See [sending.md](sending.md).
+
+## Mailboxes
+The approved mailboxes are **data**, not configuration: an administrator adds them under Settings → Mailboxes after the first deployment. No migration seeds addresses, so development databases hold test addresses only.

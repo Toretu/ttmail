@@ -45,3 +45,21 @@ All meaningful implementation, configuration, and documentation changes must be 
 - Details link in test mail now opens a preview page with sample data (nothing saved) instead of "Link not valid".
 - Answers panel: "Reserve chosen products" button creates reservations from a recipient's choices.
 - Added replies: migration 009, `Mail/Replies`, `bin/fetch-replies.php`, `ReplyInboxController`, the Replies page with stages, follow-up date, note and history. See `docs/replies.md`.
+
+## 2026-11-06 (code review follow-up)
+
+- **Fixed:** `{{products}}` was empty in mail actually sent to a contact (only the sample preview listed products). `Composer` now keeps the product list for real recipients.
+- **Delete guards (ADR-008):** contacts that have unsubscribed or have been sent campaign mail, and companies with such contacts, can no longer be deleted (409 with guidance). Plain records can still be deleted.
+- **Unknown outcome (migration 010):** a send interrupted mid-way is now `unknown` instead of `failed`; "Queue failed again" never requeues it. Counts, the problems table and the campaigns page show it.
+- **Details link tokens (migration 010, ADR-009):** `{{details_link}}` uses its own per-campaign token (`campaign_links`) that expires after `REPLY_LINK_DAYS` (default 90); an expired link answers 410. The unsubscribe token no longer opens the details page. Links in mail sent before the upgrade keep working for 90 days after they were sent (the migration backfills them); the old "Outcome unknown" failures are converted to the new `unknown` status.
+- **Preview has no side effects:** preview and test mail use the contact's data but inactive sample links; personal tokens are created only when mail is actually sent.
+- **Roles (ADR-010):** creating and changing products/prices/capacity now needs the admin role; sales stay editor work. Campaigns page hint updated.
+- **Deny by default:** every PHP-handled route needs a session unless it is on the explicit public list (`/api/health`, `/api/auth/config`, `/auth/*`, `/unsubscribe`, `/reply`, `/`).
+- `is_active` accepts booleans and 0/1 in JSON (`format: bool`), not only `"0"`/`"1"` strings.
+- Send worker stops claiming new recipients after 55 s so slow Graph calls never make a run overlap the next cron tick.
+- "Check mailboxes now" on the Replies page is bounded (2 pages per mailbox, 120 s); cron does the full fetch.
+- Answers list loads companies and contacts in two queries instead of two per answer.
+- Removed migration 002 (seeded the production mailbox addresses into every database). Mailboxes are added under Settings → Mailboxes; the smoke test creates its own test mailbox.
+- Added GitHub Actions CI: `php -l` on all PHP files, then the Docker stack, migrations and `tests/smoke.sh` (now 170 checks, runs without host PHP by using the container).
+- Documentation: ADR-007 records the reply-stage deviation for owner approval; project plan statuses corrected (Graph integration and sending were marked "Not started" although built); architecture, data model, security, sending, campaign-message, replies, records, testing, configuration, deployment, troubleshooting and README updated.
+- `.gitignore` cleaned (no Composer `vendor/`, no `notes/sql`).

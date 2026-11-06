@@ -33,7 +33,6 @@ final class MessageController
     public function save(array $params): array
     {
         $id = (int) $params['id'];
-        $this->campaigns->find($id);
         $campaign = $this->campaigns->find($id);
         if ($campaign['send_state'] !== 'draft' || $this->sentCount($id) > 0) {
             throw new HttpException(409, 'Sending has been approved or started for this campaign, so the message can no longer be changed.');
@@ -74,7 +73,8 @@ final class MessageController
     }
 
     /**
-     * Renders the message for a recipient (contact_id) or a sample contact. Nothing is sent.
+     * Renders the message for a recipient (contact_id) or a sample contact. Nothing is sent and no personal
+     * tokens are created: links in a preview are inactive.
      *
      * @param array<string,string> $params
      * @return array<string,mixed>
@@ -83,8 +83,8 @@ final class MessageController
     {
         $campaign = $this->campaigns->find((int) $params['id']);
         $this->assertComplete($campaign);
-        $body = $_SERVER['CONTENT_LENGTH'] ?? '0';
-        $contact = $body !== '0' ? (Json::body()['contact_id'] ?? null) : null;
+        $raw = trim((string) file_get_contents('php://input'));
+        $contact = $raw === '' ? null : (Json::body()['contact_id'] ?? null);
         [$subject, $html] = $this->render($campaign, $contact === null ? null : (int) $contact);
         return ['data' => ['subject' => $subject, 'html' => $html, 'from' => $this->mailbox($campaign)['email']]];
     }

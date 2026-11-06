@@ -5,7 +5,8 @@ BASE="${BASE:-http://127.0.0.1:8081}"
 BODY=$(mktemp)
 JAR=$(mktemp)
 VIEWER_JAR=$(mktemp)
-trap 'rm -f "$BODY" "$JAR" "$VIEWER_JAR"' EXIT
+EDITOR_JAR=$(mktemp)
+trap 'rm -f "$BODY" "$JAR" "$VIEWER_JAR" "$EDITOR_JAR"' EXIT
 fail=0
 
 check() { # name expected_status method path [json]
@@ -17,7 +18,10 @@ check() { # name expected_status method path [json]
   local got; got=$(curl "${args[@]}")
   if [ "$got" = "$expected" ]; then echo "PASS $name"; else echo "FAIL $name (expected $expected, got $got): $(cat "$BODY")"; fail=1; fi
 }
-json_id() { php -r 'echo json_decode(file_get_contents($argv[1]), true)["data"]["id"];' "$BODY"; }
+# JSON helpers run PHP on the host when available, otherwise inside the web container (reads the response from stdin).
+if command -v php >/dev/null 2>&1; then PHP=(php); else PHP=(docker compose exec -T web php); fi
+json_id() { "${PHP[@]}" -r 'echo json_decode(stream_get_contents(STDIN), true)["data"]["id"];' < "$BODY"; }
+json_first_id() { "${PHP[@]}" -r 'echo json_decode(stream_get_contents(STDIN), true)["data"][0]["id"];' < "$BODY"; }
 
 suffix=$(date +%s%N)
 check "health (public)" 200 GET /api/health
@@ -29,9 +33,20 @@ me_id=$(json_id)
 check "cross-origin write refused" 403 POST /api/companies '{"name":"x"}' -H 'Origin: https://evil.example'
 check "create viewer" 201 POST /api/users "{\"email\":\"viewer-$suffix@example.com\",\"role\":\"viewer\"}"
 curl -s -o /dev/null -c "$VIEWER_JAR" -X POST -H 'Content-Type: application/json' "$BASE/auth/dev-login" -d "{\"email\":\"viewer-$suffix@example.com\"}"
+check "create editor (boolean is_active)" 201 POST /api/users "{\"email\":\"editor-$suffix@example.com\",\"role\":\"editor\",\"is_active\":true}"
+curl -s -o /dev/null -c "$EDITOR_JAR" -X POST -H 'Content-Type: application/json' "$BASE/auth/dev-login" -d "{\"email\":\"editor-$suffix@example.com\"}"
 COOKIES="$VIEWER_JAR" check "viewer can read" 200 GET /api/companies
 COOKIES="$VIEWER_JAR" check "viewer cannot write" 403 POST /api/companies '{"name":"x"}'
 COOKIES="$VIEWER_JAR" check "viewer cannot open settings" 403 GET /api/settings/graph
+COOKIES="$EDITOR_JAR" check "editor can write" 201 POST /api/companies "{\"name\":\"Editor AS $suffix\"}"
+COOKIES="$EDITOR_JAR" check "editor cannot manage users" 403 GET /api/users
+check "unknown non-api route with session" 404 GET /nope
+COOKIES=/dev/null check "unauthenticated non-api route is refused" 401 GET /nope
+check "graph status" 200 GET /api/settings/graph
+if grep -q '"ready":false' "$BODY"; then
+  check "missing Microsoft 365 configuration is reported" 422 POST /api/settings/graph/test '{}'
+  grep -q '"missing"' "$BODY" && echo "PASS missing configuration names the keys" || { echo "FAIL missing config: $(cat "$BODY")"; fail=1; }
+fi
 check "cannot change own role" 409 PUT "/api/users/$me_id" '{"role":"viewer"}'
 check "health" 200 GET /api/health
 check "unknown route" 404 GET /api/nope
@@ -54,13 +69,17 @@ check "get missing contact" 404 GET /api/contacts/999999999
 check "create campaign" 201 POST /api/campaigns "{\"name\":\"Smoke campaign $suffix\"}"
 campaign_id=$(json_id)
 check "product bad price" 422 POST "/api/campaigns/$campaign_id/products" '{"name":"X","price":"-1"}'
+COOKIES="$EDITOR_JAR" check "editor cannot add products or prices" 403 POST "/api/campaigns/$campaign_id/products" '{"name":"X","price":"1"}'
 check "limited product" 201 POST "/api/campaigns/$campaign_id/products" '{"name":"Back cover","price":"5000","quantity_available":1}'
 limited_id=$(json_id)
+COOKIES="$EDITOR_JAR" check "editor cannot change a price" 403 PUT "/api/products/$limited_id" '{"price":"1"}'
+COOKIES="$EDITOR_JAR" check "editor can read products" 200 GET "/api/campaigns/$campaign_id/products"
 check "unlimited product" 201 POST "/api/campaigns/$campaign_id/products" '{"name":"Half page","price":"1500,50"}'
 unlimited_id=$(json_id)
 check "duplicate product" 409 POST "/api/campaigns/$campaign_id/products" '{"name":"Half page","price":"1"}'
 check "sell last item" 201 POST "/api/campaigns/$campaign_id/sales" "{\"product_id\":$limited_id,\"company_id\":$company_id,\"status\":\"sold\"}"
 sale_id=$(json_id)
+COOKIES="$EDITOR_JAR" check "editor can register a sale" 201 POST "/api/campaigns/$campaign_id/sales" "{\"product_id\":$unlimited_id,\"company_id\":$company_id,\"quantity\":1}"
 check "sold out" 409 POST "/api/campaigns/$campaign_id/sales" "{\"product_id\":$limited_id,\"company_id\":$company_id}"
 check "unlimited sale" 201 POST "/api/campaigns/$campaign_id/sales" "{\"product_id\":$unlimited_id,\"company_id\":$company_id,\"quantity\":50}"
 check "capacity below sold" 409 PUT "/api/products/$limited_id" '{"quantity_available":0}'
@@ -102,22 +121,33 @@ check "delete group" 200 DELETE "/api/groups/$group_id" "{\"confirm_name\":\"Smo
 
 # Message, preview, unsubscribe
 check "list mailboxes" 200 GET /api/mailboxes
-mailbox_id=$(php -r '$d=json_decode(file_get_contents($argv[1]),true)["data"]; echo $d[0]["id"];' "$BODY")
+if ! grep -q '"id":' "$BODY"; then
+  check "create test mailbox" 201 POST /api/mailboxes '{"display_name":"Smoke test","email":"smoke-mailbox@example.com"}'
+  check "list mailboxes again" 200 GET /api/mailboxes
+fi
+mailbox_id=$(json_first_id)
+COOKIES="$EDITOR_JAR" check "editor cannot add mailboxes" 403 POST /api/mailboxes '{"display_name":"x","email":"x@example.com"}'
 check "preview needs message" 422 POST "/api/campaigns/$campaign_id/message/preview"
 check "unknown placeholder" 422 PUT "/api/campaigns/$campaign_id/message" "{\"mailbox_id\":$mailbox_id,\"subject\":\"Hi {{nope}}\",\"body\":\"x\"}"
 check "unknown mailbox" 422 PUT "/api/campaigns/$campaign_id/message" '{"mailbox_id":999999,"subject":"s","body":"b"}'
-check "save message" 200 PUT "/api/campaigns/$campaign_id/message" "{\"mailbox_id\":$mailbox_id,\"subject\":\"Hei {{first_name}}\",\"body\":\"Hei {{ first_name }} i {{company}} <b>x</b>\\nKatalog\"}"
+check "save message" 200 PUT "/api/campaigns/$campaign_id/message" "{\"mailbox_id\":$mailbox_id,\"subject\":\"Hei {{first_name}}\",\"body\":\"Hei {{ first_name }} i {{company}} <b>x</b>\\nKatalog {{details_link}}\"}"
 check "preview sample" 200 POST "/api/campaigns/$campaign_id/message/preview"
 grep -q 'Hei Kari' "$BODY" && grep -q '&lt;b&gt;' "$BODY" && echo "PASS preview escapes html" || { echo "FAIL preview: $(cat "$BODY")"; fail=1; }
 check "preview contact" 200 POST "/api/campaigns/$campaign_id/message/preview" "{\"contact_id\":$good_contact}"
-unsub_url=$(php -r 'preg_match("#unsubscribe\?t=([0-9a-f]{32})#", file_get_contents($argv[1]), $m); echo $m[1] ?? "";' "$BODY")
-[ -n "$unsub_url" ] && echo "PASS unsubscribe link in message" || { echo "FAIL no unsubscribe link"; fail=1; }
+grep -q 'Hei Ola' "$BODY" && grep -q "unsubscribe?t=00000000000000000000000000000000" "$BODY" && grep -q "reply?t=00000000000000000000000000000000" "$BODY" && echo "PASS preview personalised with inactive links" || { echo "FAIL preview links: $(cat "$BODY")"; fail=1; }
+unsub_url=$(docker compose exec -T web php -r 'require "src/bootstrap.php"; echo Mailings\Mail\Unsubscribe::tokenFor((int) $argv[1]);' -- "$good_contact")
+[ -n "$unsub_url" ] && echo "PASS unsubscribe token issued" || { echo "FAIL no unsubscribe token"; fail=1; }
+code=$(curl -s -o /dev/null -w '%{http_code}' "$BASE/reply?t=$unsub_url&c=$campaign_id"); [ "$code" = 404 ] && echo "PASS unsubscribe token does not open details page" || { echo "FAIL unsubscribe token opened details page $code"; fail=1; }
 code=$(curl -s -o "$BODY" -w '%{http_code}' "$BASE/unsubscribe?t=$unsub_url"); [ "$code" = 200 ] && grep -q "<form" "$BODY" && echo "PASS unsubscribe page (no login)" || { echo "FAIL unsubscribe page $code"; fail=1; }
 check "contact still subscribed after GET" 200 GET "/api/contacts/$good_contact"
 grep -q '"unsubscribed_at":null' "$BODY" && echo "PASS GET does not unsubscribe" || { echo "FAIL GET unsubscribed"; fail=1; }
 code=$(curl -s -o "$BODY" -w '%{http_code}' -X POST -d "t=$unsub_url" "$BASE/unsubscribe"); [ "$code" = 200 ] && echo "PASS unsubscribe confirm" || { echo "FAIL confirm $code"; fail=1; }
 check "contact unsubscribed" 200 GET "/api/contacts/$good_contact"
 grep -q '"consent_status":"withdrawn"' "$BODY" && echo "PASS unsubscribe recorded via link" || { echo "FAIL not recorded"; fail=1; }
+check "cannot delete unsubscribed contact" 409 DELETE "/api/contacts/$good_contact"
+check "cannot delete company with unsubscribed contact" 409 DELETE "/api/companies/$active_company" "{\"confirm_name\":\"Active AS $suffix\"}"
+check "deletable contact" 201 POST /api/contacts "{\"company_id\":$active_company,\"first_name\":\"Tmp\",\"last_name\":\"Gone\",\"email\":\"tmp-$suffix@example.com\"}"
+check "delete plain contact" 200 DELETE "/api/contacts/$(json_id)"
 code=$(curl -s -o /dev/null -w '%{http_code}' "$BASE/unsubscribe?t=bad"); [ "$code" = 404 ] && echo "PASS bad token 404" || { echo "FAIL bad token $code"; fail=1; }
 check "test mail bad address" 422 POST "/api/campaigns/$campaign_id/message/test" '{"to":"nope"}'
 COOKIES="$VIEWER_JAR" check "viewer cannot send test" 403 POST "/api/campaigns/$campaign_id/message/test" '{"to":"a@example.com"}'
@@ -157,14 +187,27 @@ $WORKER >/dev/null 2>&1
 check "status after second run" 200 GET "/api/campaigns/$send_id/send"
 grep -q '"sent":2' "$BODY" && echo "PASS no duplicate sends" || { echo "FAIL duplicate: $(cat "$BODY")"; fail=1; }
 check "cannot delete mailed campaign" 409 DELETE "/api/campaigns/$send_id" "{\"confirm_name\":\"Send campaign $suffix\"}"
+check "cannot delete contact that was sent mail" 409 DELETE "/api/contacts/$send_contact_1"
+check "cannot delete company whose contacts were sent mail" 409 DELETE "/api/companies/$send_company" "{\"confirm_name\":\"Send AS $suffix\"}"
+
+# Interrupted send: the recipient becomes "unknown" and is never queued again automatically
+docker compose exec -T web php -r 'require "src/bootstrap.php"; Mailings\Database::connect()->prepare("UPDATE campaign_recipients SET status = \"sending\", claimed_at = NOW() - INTERVAL 20 MINUTE WHERE campaign_id = ? AND contact_id = ?")->execute([(int) $argv[1], (int) $argv[2]]);' -- "$send_id" "$send_contact_2"
+$WORKER >/dev/null 2>&1
+check "status after interrupted send" 200 GET "/api/campaigns/$send_id/send"
+grep -q '"unknown":1' "$BODY" && grep -q '"sent":1' "$BODY" && echo "PASS interrupted send marked unknown" || { echo "FAIL unknown status: $(cat "$BODY")"; fail=1; }
+check "retry does not requeue unknown" 200 POST "/api/campaigns/$send_id/send/retry-failed"
+grep -q '"requeued":0' "$BODY" && grep -q '"unknown":1' "$BODY" && echo "PASS unknown outcome not requeued" || { echo "FAIL unknown requeued: $(cat "$BODY")"; fail=1; }
 
 # Public details page (personal link) and review
 check "reply product" 201 POST "/api/campaigns/$send_id/products" '{"name":"Half page","price":"1500"}'
 reply_product=$(json_id)
-tok=$(docker compose exec -T web php -r 'require "src/bootstrap.php"; echo Mailings\Mail\Unsubscribe::tokenFor((int) $argv[1]);' -- "$send_contact_1")
+tok=$(docker compose exec -T web php -r 'require "src/bootstrap.php"; echo Mailings\Mail\DetailsLink::tokenFor((int) $argv[1], (int) $argv[2]);' -- "$send_id" "$send_contact_1")
 code=$(curl -s -o "$BODY" -w '%{http_code}' "$BASE/reply?t=$tok&c=$send_id"); [ "$code" = 200 ] && grep -q "Half page" "$BODY" && echo "PASS reply page shows products" || { echo "FAIL reply page $code"; fail=1; }
 code=$(curl -s -o /dev/null -w '%{http_code}' "$BASE/reply?t=$tok&c=999999"); [ "$code" = 404 ] && echo "PASS reply wrong campaign 404" || { echo "FAIL reply wrong campaign $code"; fail=1; }
 code=$(curl -s -o /dev/null -w '%{http_code}' "$BASE/reply?t=bad&c=$send_id"); [ "$code" = 404 ] && echo "PASS reply bad token 404" || { echo "FAIL reply bad token $code"; fail=1; }
+docker compose exec -T web php -r 'require "src/bootstrap.php"; Mailings\Database::connect()->prepare("UPDATE campaign_links SET expires_at = NOW() - INTERVAL 1 DAY WHERE token = ?")->execute([$argv[1]]);' -- "$tok"
+code=$(curl -s -o /dev/null -w '%{http_code}' "$BASE/reply?t=$tok&c=$send_id"); [ "$code" = 410 ] && echo "PASS expired reply link refused" || { echo "FAIL expired link $code"; fail=1; }
+docker compose exec -T web php -r 'require "src/bootstrap.php"; Mailings\Database::connect()->prepare("UPDATE campaign_links SET expires_at = NOW() + INTERVAL 30 DAY WHERE token = ?")->execute([$argv[1]]);' -- "$tok"
 code=$(curl -s -o "$BODY" -w '%{http_code}' -X POST --data-urlencode "t=$tok" -d "c=$send_id" --data-urlencode "company_city=Oslo $suffix" -d "contact_first_name=S1" -d "contact_last_name=T" -d "products[]=$reply_product" -d "products[]=999999" --data-urlencode "comment=<b>hi</b>" "$BASE/reply")
 [ "$code" = 200 ] && grep -q "Thank you" "$BODY" && echo "PASS reply submitted" || { echo "FAIL reply submit $code"; fail=1; }
 check "list responses" 200 GET "/api/campaigns/$send_id/responses"
@@ -172,7 +215,7 @@ grep -q "Oslo $suffix" "$BODY" && grep -q "Half page" "$BODY" && echo "PASS resp
 check "company unchanged before apply" 200 GET "/api/companies/$send_company"
 grep -q "Oslo $suffix" "$BODY" && { echo "FAIL city changed before apply"; fail=1; } || echo "PASS master data untouched"
 check "list responses again" 200 GET "/api/campaigns/$send_id/responses"
-resp_id=$(php -r '$d=json_decode(file_get_contents($argv[1]),true); echo $d["data"][0]["id"];' "$BODY")
+resp_id=$(json_first_id)
 COOKIES="$VIEWER_JAR" check "viewer cannot apply" 403 POST "/api/campaigns/$send_id/responses/$resp_id/apply" '{}'
 check "apply response" 200 POST "/api/campaigns/$send_id/responses/$resp_id/apply" '{}'
 check "company after apply" 200 GET "/api/companies/$send_company"
@@ -198,7 +241,7 @@ echo $a["stored"], $a["unknown"], $b["stored"];' -- "send1-$suffix@example.com" 
 [ "$(cat "$BODY")" = "110" ] && echo "PASS reply stored once, unknown sender ignored" || { echo "FAIL reply store: $(cat "$BODY")"; fail=1; }
 check "list replies" 200 GET "/api/replies?campaign_id=$send_id"
 grep -q "Re: Hei" "$BODY" && grep -q '"new":' "$BODY" && echo "PASS reply listed and matched to campaign" || { echo "FAIL reply list: $(cat "$BODY")"; fail=1; }
-reply_id=$(php -r '$d=json_decode(file_get_contents($argv[1]),true); echo $d["data"][0]["id"];' "$BODY")
+reply_id=$(json_first_id)
 check "get reply" 200 GET "/api/replies/$reply_id"
 check "reply bad stage" 422 PUT "/api/replies/$reply_id" '{"stage":"nope"}'
 check "reply bad date" 422 PUT "/api/replies/$reply_id" '{"next_followup":"2026-13-45"}'

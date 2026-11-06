@@ -4,6 +4,7 @@ declare(strict_types=1);
 namespace Mailings\Http;
 
 use Mailings\Database;
+use Mailings\Mail\DetailsLink;
 use Mailings\Validator;
 
 /**
@@ -111,16 +112,22 @@ final class ReplyController
             $invalid();
         }
         $pdo = Database::connect();
-        if ($token === str_repeat('0', 32)) {
+        if ($token === DetailsLink::SAMPLE_TOKEN) {
             return $this->sample($pdo, (int) $campaignId);
         }
+        $link = DetailsLink::resolve($token, (int) $campaignId);
+        if ($link === null) {
+            $invalid();
+        }
+        if ($link['expired']) {
+            self::page(410, 'Link expired', '<p>This link has expired. Please reply to the email instead. / Lenken er utløpt. Svar på e-posten i stedet.</p>');
+        }
         $stmt = $pdo->prepare(
-            "SELECT c.*, r.campaign_id FROM contact_tokens t
-             JOIN contacts c ON c.id = t.contact_id
+            "SELECT c.*, r.campaign_id FROM contacts c
              JOIN campaign_recipients r ON r.contact_id = c.id AND r.campaign_id = ? AND r.status = 'sent'
-             WHERE t.token = ?"
+             WHERE c.id = ?"
         );
-        $stmt->execute([(int) $campaignId, $token]);
+        $stmt->execute([(int) $campaignId, $link['contact_id']]);
         $contact = $stmt->fetch();
         if ($contact === false || $contact['unsubscribed_at'] !== null) {
             $invalid();
@@ -152,7 +159,7 @@ final class ReplyController
         $products = $pdo->prepare('SELECT id, name, description, price FROM campaign_products WHERE campaign_id = ? ORDER BY sort_order, id');
         $products->execute([$campaignId]);
         return [
-            'token' => str_repeat('0', 32), 'campaign' => $campaign, 'preview' => true, 'closed' => false,
+            'token' => DetailsLink::SAMPLE_TOKEN, 'campaign' => $campaign, 'preview' => true, 'closed' => false,
             'contact' => ['id' => 0, 'email' => 'kari@example.com', 'first_name' => 'Kari', 'last_name' => 'Nordmann', 'job_title' => 'Daglig leder', 'phone' => '900 00 000'],
             'company' => ['name' => 'Eksempel AS', 'org_number' => '999 999 999', 'billing_address' => 'Storgata 1', 'postal_code' => '0001', 'city' => 'Oslo', 'website' => 'https://example.com'],
             'products' => $products->fetchAll(),
@@ -171,13 +178,13 @@ final class ReplyController
         }
         $e = self::e(...);
         if (empty($ctx['preview'])) {
-        $existing = Database::connect()->prepare('SELECT product_ids, comment FROM campaign_responses WHERE campaign_id = ? AND contact_id = ?');
-        $existing->execute([$ctx['campaign']['id'], $ctx['contact']['id']]);
-        $prev = $existing->fetch();
-        if ($posted === [] && $prev !== false) {
-            $wanted = array_map('strval', json_decode((string) $prev['product_ids'], true) ?: []);
-            $comment = (string) $prev['comment'];
-        }
+            $existing = Database::connect()->prepare('SELECT product_ids, comment FROM campaign_responses WHERE campaign_id = ? AND contact_id = ?');
+            $existing->execute([$ctx['campaign']['id'], $ctx['contact']['id']]);
+            $prev = $existing->fetch();
+            if ($posted === [] && $prev !== false) {
+                $wanted = array_map('strval', json_decode((string) $prev['product_ids'], true) ?: []);
+                $comment = (string) $prev['comment'];
+            }
         }
 
         $html = !empty($ctx['preview']) ? '<p class="err">TEST: sample data. Nothing you enter is saved. / TEST: eksempeldata, ingenting lagres.</p>' : '';

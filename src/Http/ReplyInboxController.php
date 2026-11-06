@@ -119,10 +119,11 @@ final class ReplyInboxController
         return $this->get($params);
     }
 
-    /** @return array<string,mixed> */
+    /** On-demand fetch from the Replies page. Bounded (2 pages per mailbox, longer time limit); cron does the full fetch. @return array<string,mixed> */
     public function sync(): array
     {
-        $r = (new Replies())->run();
+        set_time_limit(120);
+        $r = (new Replies(2))->run();
         return ['data' => $r];
     }
 }

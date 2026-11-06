@@ -30,11 +30,11 @@ Validates input, enforces permissions, applies unsubscribe and duplicate checks,
 
 ### MariaDB
 
-MariaDB 10.6 stores companies, contacts, groups, campaigns, recipients, products, opportunities, activities, follow-up stages, configuration, and audit history.
+MariaDB 10.6 is the system of record. Implemented today: companies, contacts, groups and members, mailboxes, users, campaigns, recipients, products and sales, campaign messages and sending state, unsubscribe and details-link tokens, recipient answers, replies with stage history and mailbox sync state (see [data-model.md](data-model.md)). Planned: opportunities, activities, configuration table and a general audit log.
 
 ### Microsoft Graph mail adapter
 
-Sends campaign messages through Microsoft Graph from the approved mailboxes `programm@paradisskolekorps.no` and `salg@paradisskolekorps.no`. The adapter must support test messages, controlled batches, delivery errors, reply-to configuration, reply retrieval, and unsubscribe handling.
+Sends campaign messages through Microsoft Graph from the approved mailboxes `programm@paradisskolekorps.no` and `salg@paradisskolekorps.no`, which an administrator registers under Settings → Mailboxes. The adapter (`src/Graph`, `src/Mail`) supports test messages, controlled batches with claim-before-send, delivery errors and automatic pausing, reply retrieval, and unsubscribe handling. Reply-to configuration is not implemented (replies go to the sending mailbox).
 
 The application must select an approved mailbox per project or campaign. Mailbox configuration must be stored as data and must not contain client secrets or access tokens.
 

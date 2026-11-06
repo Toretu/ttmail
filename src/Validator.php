@@ -8,8 +8,9 @@ use Mailings\Http\HttpException;
 final class Validator
 {
     /**
-     * Rules per field: required, max, enum, format (email|url|int|decimal|country), min (int), default.
+     * Rules per field: required, max, enum, format (email|url|int|decimal|country|bool), min (int), default.
      * Unknown input fields are ignored; only fields defined in $rules are returned.
+     * format bool accepts true/false, 1/0 and "1"/"0" and returns the integer 1 or 0.
      *
      * @param array<string,mixed> $input
      * @param array<string,array<string,mixed>> $rules
@@ -47,6 +48,19 @@ final class Validator
             }
 
             $format = $rule['format'] ?? null;
+            if ($format === 'bool') {
+                $flag = match (true) {
+                    $value === true, $value === 1, $value === '1', $value === 'true' => 1,
+                    $value === false, $value === 0, $value === '0', $value === 'false' => 0,
+                    default => null,
+                };
+                if ($flag === null) {
+                    $errors[$field] = 'must be true or false';
+                    continue;
+                }
+                $data[$field] = $flag;
+                continue;
+            }
             if ($format === 'int') {
                 if (!is_int($value) && !(is_string($value) && ctype_digit($value))) {
                     $errors[$field] = 'must be an integer';

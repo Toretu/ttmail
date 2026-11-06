@@ -1,0 +1,84 @@
+UPGRADE NOTES - code review follow-up (2026-11-06)
+===================================================
+
+How to upgrade the running installation
+----------------------------------------
+Same as before, run the two commands back to back:
+
+    git pull
+    php bin/migrate.php
+
+Between the two commands the public details page (/reply) answers 500 because
+the new code expects the new table, so do not pause between them.
+
+After the upgrade
+-----------------
+1. Give the ADMIN role (Settings -> Users) to whoever maintains products and
+   prices. Editors now get 403 when adding or changing products, prices or
+   capacity (ADR-010). Registering sales is still editor work.
+2. Nothing else is required:
+   - cron commands are unchanged (bin/send-queue.php every minute,
+     bin/fetch-replies.php every few minutes)
+   - .env needs no new values; REPLY_LINK_DAYS is optional (default 90)
+   - PHP requirements are unchanged (8.3 with curl, pdo_mysql, mbstring, zip)
+3. Optional: run the smoke test against a development stack
+   (bash tests/smoke.sh, needs APP_ENV=development, AUTH_DEV_LOGIN=1,
+   MAIL_DRY_RUN=1).
+
+What migration 010 does to live data (verified on an old-schema database)
+-------------------------------------------------------------------------
+- Adds the recipient status "unknown" (interrupted send, outcome not known).
+  Old rows marked failed with "Outcome unknown ..." are converted to unknown,
+  so "Queue failed again" will never resend them.
+- Creates campaign_links: a separate, expiring token per campaign and contact
+  for the {{details_link}} page. The unsubscribe token no longer opens that
+  page for new mail.
+- Backfills campaign_links for recipients already sent, using the old token,
+  valid 90 days after the send date, so details links in mail that is already
+  out keep working.
+- Existing mailboxes are kept. The removed seed migration (002) stays recorded
+  in schema_migrations and is simply skipped.
+- Safe to re-run: "Database is up to date."
+
+Transitional caveat
+-------------------
+For mail sent BEFORE the upgrade, the details link and the unsubscribe link
+share one token (old design). For those contacts the unsubscribe token can
+still open the details page until 90 days after the send date. New mail uses
+separate tokens. If you prefer a hard cut (old details links stop working,
+separation is immediate), delete the final INSERT ... SELECT block in
+migrations/010_unknown_status_and_campaign_links.sql before pulling on the
+server.
+
+Behaviour changes users will notice
+-----------------------------------
+- Contacts that unsubscribed or were sent campaign mail (and their companies)
+  can no longer be deleted; the API answers 409 with guidance. Mark the contact
+  withdrawn or set the company inactive / do not contact instead (ADR-008).
+- The Sending panel shows "outcome unknown N" when it applies; "Queue failed
+  again" only requeues real failures.
+- Preview and test mail contain inactive sample links even when a real contact
+  is shown; personal tokens are created only when mail is actually sent.
+- {{products}} is now listed in real mail (it was empty for real recipients
+  before; only the sample preview showed it).
+- Every route handled by PHP requires a session unless it is on the public
+  list (/api/health, /api/auth/config, /auth/*, /unsubscribe, /reply, /).
+- Details links expire after REPLY_LINK_DAYS days (default 90); an expired link
+  shows "Link expired" (HTTP 410).
+- Behind a reverse proxy the original Host header must be passed through
+  (ProxyPreserveHost On / proxy_set_header Host $host), otherwise every save is
+  refused as cross-origin. See docs/deployment.md.
+
+Open decisions for the project owner
+------------------------------------
+- ADR-007: the Replies pane uses 7 follow-up stages instead of the 15 sales
+  stages in the instructions. Approve, or ask for the full list.
+- ADR-010: products/prices admin-only. Say so if campaign managers (editors)
+  should be allowed to set prices instead.
+- ADR-008: a data-protection deletion request now needs a documented
+  anonymisation procedure (contacts with history cannot be deleted).
+
+References
+----------
+docs/change-log.md (2026-11-06 entry), docs/deployment.md (Upgrading an
+existing installation), docs/decisions.md (ADR-007 .. ADR-010).

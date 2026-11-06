@@ -27,17 +27,18 @@ final class ResponseController
         $products->execute([(int) $params['id']]);
         $names = array_column($products->fetchAll(), 'name', 'id');
 
+        $current = [
+            'company' => $this->byId('companies', array_map(static fn (array $r): int => (int) $r['company_id'], $rows)),
+            'contact' => $this->byId('contacts', array_map(static fn (array $r): int => (int) $r['contact_id'], $rows)),
+        ];
         $out = [];
         foreach ($rows as $row) {
             $changes = json_decode((string) $row['changes'], true) ?: [];
-            $current = [
-                'company' => $this->current('companies', (int) $row['company_id']),
-                'contact' => $this->current('contacts', (int) $row['contact_id']),
-            ];
+            $ids = ['company' => (int) $row['company_id'], 'contact' => (int) $row['contact_id']];
             $diff = [];
             foreach ($changes as $group => $fields) {
                 foreach ($fields as $field => $value) {
-                    $diff[] = ['group' => $group, 'field' => $field, 'old' => $current[$group][$field] ?? null, 'new' => $value];
+                    $diff[] = ['group' => $group, 'field' => $field, 'old' => $current[$group][$ids[$group]][$field] ?? null, 'new' => $value];
                 }
             }
             $out[] = [
@@ -105,11 +106,22 @@ final class ResponseController
         return $row;
     }
 
-    /** @return array<string,mixed> */
-    private function current(string $table, int $id): array
+    /**
+     * @param list<int> $ids
+     * @return array<int,array<string,mixed>> rows keyed by id
+     */
+    private function byId(string $table, array $ids): array
     {
-        $stmt = Database::connect()->prepare("SELECT * FROM {$table} WHERE id = ?");
-        $stmt->execute([$id]);
-        return $stmt->fetch() ?: [];
+        $ids = array_values(array_unique($ids));
+        if ($ids === []) {
+            return [];
+        }
+        $stmt = Database::connect()->prepare("SELECT * FROM {$table} WHERE id IN (" . implode(',', array_fill(0, count($ids), '?')) . ')');
+        $stmt->execute($ids);
+        $out = [];
+        foreach ($stmt->fetchAll() as $row) {
+            $out[(int) $row['id']] = $row;
+        }
+        return $out;
     }
 }

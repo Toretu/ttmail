@@ -26,9 +26,9 @@ Microsoft 365 is optional for the application itself. It may still be used for e
 7. Grant only the required Microsoft Graph permissions.
 8. Restrict Graph application access to the approved mailboxes.
 9. Configure the Microsoft Graph mail adapter for the approved mailboxes. Follow [office365-setup.md](office365-setup.md) and verify with Settings → Test connection (`/settings.html`).
-10. Configure scheduled jobs for campaign batches and reminders.
-11. Create administrator, campaign manager, volunteer, and read-only roles.
-12. Create the initial admin account or configure Entra ID sign-in.
+10. Add the approved mailboxes under Settings → Mailboxes (migrations do not seed them).
+11. Configure scheduled jobs for campaign batches and reply fetching ([sending.md](sending.md), [replies.md](replies.md)).
+12. Set `AUTH_BOOTSTRAP_ADMIN`, sign in once as that address, then add users and roles under Settings → Users.
 13. Configure encrypted backups and retention.
 14. Deploy the web application.
 15. Run the smoke test.

@@ -57,6 +57,7 @@
 
     <div class="panel">
       <h2>Add product</h2>
+      <p class="hint">Products, prices and capacity are set by an administrator. Editors register sales below.</p>
       <div class="row">
         <label>Name <input id="pName" placeholder="Full page"></label>
         <label>Price (NOK) <input id="pPrice" size="8" inputmode="decimal"></label>
@@ -336,7 +337,7 @@ async function loadSend() {
   const c = s.counts;
   $('sDry').hidden = !s.dry_run;
   $('sState').textContent = STATE_TEXT[s.state] || s.state;
-  $('sCounts').textContent = `sent ${c.sent} · waiting ${c.pending + c.sending} · failed ${c.failed} · skipped ${c.skipped}`;
+  $('sCounts').textContent = `sent ${c.sent} · waiting ${c.pending + c.sending} · failed ${c.failed} · skipped ${c.skipped}` + (c.unknown ? ` · outcome unknown ${c.unknown}` : '');
   $('sReason').textContent = s.pause_reason || '';
   const draft = s.state === 'draft';
   $('sApprove').hidden = !draft || c.pending === 0;
@@ -376,7 +377,7 @@ $('sGo').addEventListener('click', () => guarded(async () => {
 }));
 for (const [id, action] of [['sPause', 'pause'], ['sResume', 'resume'], ['sRetry', 'retry-failed']]) {
   $(id).addEventListener('click', () => guarded(async () => {
-    if (action === 'retry-failed' && !confirm('Entries marked "Outcome unknown" may already have been delivered. Check the mailbox Sent Items first. Queue them again anyway?')) return;
+    if (action === 'retry-failed' && !confirm('Queue the failed recipients again? Entries marked "outcome unknown" are not queued; check the mailbox Sent Items for those.')) return;
     await api('POST', `/campaigns/${current}/send/${action}`);
     await loadDetail();
   }));
@@ -402,7 +403,7 @@ async function loadRecipients() {
   const res = await apiFull('GET', `/campaigns/${current}/recipients`);
   const by = res.meta.by_status;
   $('rTotal').textContent = `${res.meta.total} recipients`;
-  $('rStatus').textContent = `pending ${by.pending + by.sending}, sent ${by.sent}, failed ${by.failed}, skipped ${by.skipped}`;
+  $('rStatus').textContent = `pending ${by.pending + by.sending}, sent ${by.sent}, failed ${by.failed}, skipped ${by.skipped}` + (by.unknown ? `, outcome unknown ${by.unknown}` : '');
   const body = $('rRows');
   body.replaceChildren();
   for (const r of res.data) {

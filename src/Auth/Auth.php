@@ -83,10 +83,13 @@ final class Auth
         self::$loaded = true;
     }
 
-    /** Minimum role needed for an API request, or null if it is public. */
+    /** Routes that need no session. Everything else handled by PHP requires at least the viewer role. */
+    private const PUBLIC_PATHS = ['/', '/api/health', '/api/auth/config', '/auth/login', '/auth/callback', '/auth/dev-login', '/auth/logout', '/unsubscribe', '/reply'];
+
+    /** Minimum role needed for a request, or null if it is public. Unknown paths fall back to viewer/editor so new routes are never public by accident. */
     public static function requiredRole(string $method, string $path): ?string
     {
-        if (in_array($path, ['/api/health', '/api/auth/config'], true)) {
+        if (in_array($path, self::PUBLIC_PATHS, true)) {
             return null;
         }
         if ($path === '/api/me') {
@@ -95,18 +98,21 @@ final class Auth
         if (str_starts_with($path, '/api/settings') || str_starts_with($path, '/api/users')) {
             return 'admin';
         }
-        if (str_starts_with($path, '/api/mailboxes') && $method !== 'GET') {
+        if ($method !== 'GET' && (str_starts_with($path, '/api/mailboxes') || self::isProductRoute($path))) {
             return 'admin';
         }
         return $method === 'GET' ? 'viewer' : 'editor';
     }
 
+    /** Products, prices and capacity are administrator settings; sales against them are editor work. */
+    private static function isProductRoute(string $path): bool
+    {
+        return str_starts_with($path, '/api/products/') || preg_match('#^/api/campaigns/\d+/products$#', $path) === 1;
+    }
+
     /** Enforces authentication, role and same-origin for state-changing requests. */
     public static function enforce(string $method, string $path): void
     {
-        if (!str_starts_with($path, '/api/')) {
-            return;
-        }
         $role = self::requiredRole($method, $path);
         if ($role === null) {
             return;
