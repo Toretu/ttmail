@@ -10,10 +10,10 @@ UI: `http://127.0.0.1:8081/campaigns.html` (create a campaign, add products, reg
 |---|---|---|
 | GET/POST | `/api/campaigns` | List / create (`name`, `description`, `status`) |
 | GET/PUT | `/api/campaigns/{id}` | Read / update |
-| GET/POST | `/api/campaigns/{id}/products` | List / add (`name`, `price`, `quantity_available`, `description`, `sort_order`) |
-| PUT | `/api/products/{id}` | Change price, name or capacity |
-| GET/POST | `/api/campaigns/{id}/sales` | List (filter `status`, `product_id`, `company_id`) / register (`product_id`, `company_id`, `quantity`, `status`, `unit_price`, `notes`) |
-| PUT | `/api/sales/{id}` | Change `status`, `quantity`, `unit_price`, `notes` |
+| GET/POST | `/api/campaigns/{id}/products` | List / add (`name`, `price`, `quantity_available`, `description`, `sort_order`). Adding needs the **admin** role (ADR-010). |
+| PUT | `/api/products/{id}` | Change price, name or capacity (**admin**) |
+| GET/POST | `/api/campaigns/{id}/sales` | List (filter `status`, `product_id`, `company_id`) / register (`product_id`, `company_id`, `quantity`, `status`, `unit_price`, `notes`) (editor) |
+| PUT | `/api/sales/{id}` | Change `status`, `quantity`, `unit_price`, `notes` (editor) |
 | GET | `/api/campaigns/{id}/summary` | Per product: capacity, reserved, sold, remaining, values; plus totals |
 
 ## Rules

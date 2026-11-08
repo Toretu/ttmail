@@ -10,7 +10,12 @@ use Mailings\Graph\GraphException;
 /** Fetches inbox mail for the approved mailboxes and stores replies from known contacts. */
 final class Replies
 {
-    private const MAX_PAGES = 10;
+    /** Pages of 50 messages per mailbox and run. Cron uses the default; the web "check now" button uses fewer. */
+    public const MAX_PAGES = 10;
+
+    public function __construct(private readonly int $maxPages = self::MAX_PAGES)
+    {
+    }
 
     /** @return array{seen:int,stored:int,unknown:int,error:?string} totals over all active mailboxes */
     public function run(): array
@@ -62,7 +67,7 @@ final class Replies
                 '$top' => 50,
                 '$select' => 'id,subject,from,receivedDateTime,bodyPreview,body',
             ], '', '&', PHP_QUERY_RFC3986);
-            for ($page = 0; $url !== null && $page < self::MAX_PAGES; $page++) {
+            for ($page = 0; $url !== null && $page < $this->maxPages; $page++) {
                 $res = $client->getPage($token, $url, ['Prefer: outlook.body-content-type="text"']);
                 array_push($messages, ...($res['value'] ?? []));
                 $url = is_string($res['@odata.nextLink'] ?? null) ? $res['@odata.nextLink'] : null;

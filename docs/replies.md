@@ -4,7 +4,7 @@ Replies to campaign mail are read from the approved mailboxes through Microsoft 
 
 ## How it works
 
-- `bin/fetch-replies.php` reads the **inbox** of each active mailbox (`programm@`, `salg@`) and is run by cron. **Check mailboxes now** on the page does the same on demand.
+- `bin/fetch-replies.php` reads the **inbox** of each active mailbox (Settings → Mailboxes) and is run by cron. **Check mailboxes now** on the page does the same on demand, limited to 2 pages (100 messages) per mailbox so the request finishes; cron fetches up to 10 pages per run.
 - Only mail from an address that is a **contact** in the system is stored. Everything else is counted ("unknown senders ignored") and discarded, so the rest of the inbox is not copied into the database.
 - A reply is linked to the campaign that contact was last sent before the reply arrived.
 - The first run looks 30 days back; later runs continue from the newest mail seen. A message is stored once (unique per mailbox and Graph message id).
@@ -13,7 +13,7 @@ Replies to campaign mail are read from the approved mailboxes through Microsoft 
 
 ## Stages
 
-New → Interested → Needs a call → Quote sent → Won / Declined / Done. Every change is logged with who changed it and when. "Follow-up due" lists replies with a follow-up date today or earlier that are not Won, Declined or Done.
+New → Interested → Needs a call → Quote sent → Won / Declined / Done. Every change is logged with who changed it and when. "Follow-up due" lists replies with a follow-up date today or earlier that are not Won, Declined or Done. These are a deliberate subset of the project's sales stages; see ADR-007 in [decisions.md](decisions.md) (awaiting owner approval).
 
 ## Server setup
 

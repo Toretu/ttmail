@@ -76,7 +76,13 @@ final class SendController
         return $this->transition((int) $params['id'], 'paused', 'sending', null);
     }
 
-    /** Puts failed recipients back in the queue. Entries with unknown outcome may already have been delivered. @param array<string,string> $params @return array<string,mixed> */
+    /**
+     * Puts failed recipients back in the queue. Recipients with an unknown outcome are left alone: the mail may already
+     * have been delivered, so they can only be added again by hand after checking Sent Items.
+     *
+     * @param array<string,string> $params
+     * @return array<string,mixed>
+     */
     public function retryFailed(array $params): array
     {
         $id = (int) $params['id'];
@@ -108,7 +114,7 @@ final class SendController
     private function snapshot(int $id): array
     {
         $c = $this->campaigns->find($id);
-        $stmt = Database::connect()->prepare("SELECT email, status, error, sent_at FROM campaign_recipients WHERE campaign_id = ? AND status IN ('failed','skipped') ORDER BY id LIMIT 200");
+        $stmt = Database::connect()->prepare("SELECT email, status, error, sent_at FROM campaign_recipients WHERE campaign_id = ? AND status IN ('failed','skipped','unknown') ORDER BY id LIMIT 200");
         $stmt->execute([$id]);
         return [
             'state' => $c['send_state'],
@@ -128,7 +134,7 @@ final class SendController
     {
         $stmt = Database::connect()->prepare('SELECT status, COUNT(*) FROM campaign_recipients WHERE campaign_id = ? GROUP BY status');
         $stmt->execute([$id]);
-        $counts = ['pending' => 0, 'sending' => 0, 'sent' => 0, 'failed' => 0, 'skipped' => 0];
+        $counts = ['pending' => 0, 'sending' => 0, 'sent' => 0, 'failed' => 0, 'skipped' => 0, 'unknown' => 0];
         foreach ($stmt->fetchAll(\PDO::FETCH_KEY_PAIR) as $status => $n) {
             $counts[$status] = (int) $n;
         }

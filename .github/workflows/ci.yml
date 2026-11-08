@@ -1,0 +1,58 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# The workflow only needs to read the repository; it never pushes or comments.
+permissions:
+  contents: read
+
+jobs:
+  lint:
+    name: PHP syntax
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.3'
+          coverage: none
+      - name: php -l
+        run: |
+          set -e
+          find src bin public -name '*.php' -print0 | xargs -0 -n1 php -l > /dev/null
+          echo "All PHP files parse."
+
+  smoke:
+    name: API smoke test (Docker)
+    runs-on: ubuntu-latest
+    needs: lint
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.3'
+          coverage: none
+      - name: Create .env for testing
+        run: |
+          bash bin/init-env.sh
+          sed -i 's/^MAIL_DRY_RUN=.*/MAIL_DRY_RUN=1/' .env
+          grep -E '^(APP_ENV|AUTH_DEV_LOGIN|MAIL_DRY_RUN)=' .env
+      - name: Start stack
+        run: docker compose up -d --build --wait --wait-timeout 180
+      - name: Migrate
+        run: |
+          for i in $(seq 1 10); do
+            docker compose exec -T web php bin/migrate.php && break
+            sleep 3
+          done
+      - name: Smoke test
+        run: bash tests/smoke.sh
+      - name: Logs on failure
+        if: failure()
+        run: docker compose logs --no-color --tail=200
+      - name: Stop stack
+        if: always()
+        run: docker compose down -v

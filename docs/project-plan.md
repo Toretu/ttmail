@@ -18,19 +18,26 @@ Create a maintainable, low-cost self-hosted customer and campaign management sol
 | Phase | Status | Dependencies | Acceptance summary |
 |---|---|---|---|
 | Foundation and environment | In progress | None | Server, database, mail, permissions, and architecture are documented |
-| Database schema and API foundation | In progress (schema, API, Microsoft 365 sign-in and roles done) | Foundation | MariaDB schema, plain PHP API conventions, migrations, and authentication are ready |
-| Microsoft Graph mail integration | Not started | Foundation | Approved Office 365 mailboxes can send and retrieve campaign mail |
-| Companies and contacts | In progress | Database and API foundation | Companies can have multiple contacts and searchable history |
+| Database schema and API foundation | Complete (schema, migrations, API conventions, Microsoft 365 sign-in and roles, CI) | Foundation | MariaDB schema, plain PHP API conventions, migrations, and authentication are ready |
+| Microsoft Graph mail integration | Ready for testing (client, send, read, connection test built; not yet verified against the live tenant) | Foundation | Approved Office 365 mailboxes can send and retrieve campaign mail |
+| Companies and contacts | In progress (CRUD, import, delete guards done; history view next) | Database and API foundation | Companies can have multiple contacts and searchable history |
 | Groups | Done (groups, filters, members) | Companies and contacts | Groups can be created, reviewed, and reused |
-| Campaigns | In progress (products and sales done; recipients, message, preview and test send done; sending with approval, pause and retry done; replies and follow-up next) | Groups | Campaign recipients and campaign statistics are available |
-| Controlled email sending | Not started | Campaigns, Microsoft Graph mail integration | Approved campaigns send in controlled batches |
-| Replies and follow-ups | In progress (reply fetching and follow-up stages built; opportunities and payments next) | Email sending | Replies become actionable follow-up records |
-| Advertising products | Done (per-campaign products, capacity, sales summary) | Foundation | Page products, prices, and inventory are configurable |
+| Campaigns | In progress (products and sales, recipients, message, preview, test send, details link and answers done; statistics next) | Groups | Campaign recipients and campaign statistics are available |
+| Controlled email sending | Ready for testing (approval, worker, pause/resume/retry, unknown-outcome handling built; needs a live Microsoft 365 run) | Campaigns, Microsoft Graph mail integration | Approved campaigns send in controlled batches |
+| Replies and follow-ups | In progress (reply fetching and follow-up stages built – see ADR-007; opportunities and payments next) | Email sending | Replies become actionable follow-up records |
+| Advertising products | Done (per-campaign products, capacity, sales summary; admin-only prices – ADR-010) | Foundation | Page products, prices, and inventory are configurable |
 | Opportunities and payments | Not started | Campaigns, products | Quotes, sales, invoices, and payments are tracked |
 | Reports and dashboards | Not started | Campaigns, opportunities | Users can see campaign progress and value |
-| Security and deployment | Not started | All MVP features | Production deployment is repeatable and access is restricted |
+| Security and deployment | In progress (CI, deny-by-default routes, reverse-proxy notes done; audit log, data-deletion procedure, production deployment open) | All MVP features | Production deployment is repeatable and access is restricted |
 | User acceptance testing | Not started | Testable MVP | Volunteers approve the workflows |
 | Production launch | Not started | UAT complete | Live solution is documented and supported |
+
+## Open decisions and items
+
+- ADR-007 (reply stages vs. the required sales stages) needs the project owner's approval or a change request.
+- Data-protection deletion: contacts with history cannot be deleted (ADR-008); an anonymisation procedure must be written before launch.
+- Audit log of who changed what (beyond approvals and reply stage history).
+- Live Microsoft 365 test of sending and reply retrieval.
 
 ## Work rules
 

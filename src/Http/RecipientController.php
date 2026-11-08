@@ -27,7 +27,7 @@ final class RecipientController
         $stmt->execute([$id]);
         $counts = $pdo->prepare('SELECT status, COUNT(*) FROM campaign_recipients WHERE campaign_id = ? GROUP BY status');
         $counts->execute([$id]);
-        $byStatus = ['pending' => 0, 'sending' => 0, 'sent' => 0, 'failed' => 0, 'skipped' => 0];
+        $byStatus = ['pending' => 0, 'sending' => 0, 'sent' => 0, 'failed' => 0, 'skipped' => 0, 'unknown' => 0];
         foreach ($counts->fetchAll(\PDO::FETCH_KEY_PAIR) as $status => $n) {
             $byStatus[$status] = (int) $n;
         }

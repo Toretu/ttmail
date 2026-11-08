@@ -45,7 +45,7 @@ final class Schema
             'email' => ['required' => true, 'format' => 'email', 'max' => 254],
             'display_name' => ['max' => 150],
             'role' => ['enum' => ['viewer', 'editor', 'admin'], 'default' => 'viewer'],
-            'is_active' => ['enum' => ['0', '1'], 'default' => '1'],
+            'is_active' => ['format' => 'bool', 'default' => 1],
         ];
     }
 
@@ -55,7 +55,7 @@ final class Schema
         return [
             'name' => ['required' => true, 'max' => 150],
             'description' => ['max' => 500],
-            'is_active' => ['enum' => ['0', '1'], 'default' => '1'],
+            'is_active' => ['format' => 'bool', 'default' => 1],
         ];
     }
 
@@ -65,7 +65,7 @@ final class Schema
         return [
             'display_name' => ['required' => true, 'max' => 150],
             'email' => ['required' => true, 'format' => 'email', 'max' => 254],
-            'is_active' => ['enum' => ['0', '1'], 'default' => '1'],
+            'is_active' => ['format' => 'bool', 'default' => 1],
         ];
     }
 

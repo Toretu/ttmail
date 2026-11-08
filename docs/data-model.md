@@ -14,11 +14,11 @@ Group ID, name, description, active status, filter definition, owner, audit fiel
 
 ## Sending state
 
-Migrations 006 and 007: campaigns hold `mailbox_id`, `subject`, `body`, `send_state` (draft/sending/paused/done), `test_sent_at`, `approved_by`, `approved_at`, `pause_reason`. `campaign_recipients` gain status `sending`, `claimed_at`, `sent_at`, `error`. `contact_tokens` holds per-contact unsubscribe tokens.
+Migrations 006, 007 and 010: campaigns hold `mailbox_id`, `subject`, `body`, `send_state` (draft/sending/paused/done), `test_sent_at`, `approved_by`, `approved_at`, `pause_reason`. `campaign_recipients` gain status `sending`/`unknown`, `claimed_at`, `sent_at`, `error`. `contact_tokens` holds per-contact unsubscribe tokens; `campaign_links` holds the per-campaign, per-contact details-link tokens with `expires_at`.
 
 ## Group members
 
-Implemented (migrations 001 and 005): `contact_groups`, `contact_group_members` (source manual/filter) and `campaign_recipients` (campaign, contact, email snapshot, status pending/sent/failed/skipped; one row per contact per campaign). Deleting a contact removes its recipient rows; this will be restricted once mail has been sent.
+Implemented (migrations 001 and 005): `contact_groups`, `contact_group_members` (source manual/filter) and `campaign_recipients` (campaign, contact, email snapshot, status pending/sending/sent/failed/skipped/unknown; one row per contact per campaign). Deleting a contact removes its recipient rows, which is why contacts that were sent mail or unsubscribed cannot be deleted (ADR-008).
 
 Group, company, contact, membership source, date added, active status.
 
@@ -71,4 +71,10 @@ Mailbox ID, display name, Microsoft 365 email address, Graph sender identity, ac
 
 Migration 008: `campaign_responses` (campaign_id, contact_id, `changes` JSON, `product_ids` JSON, comment, status new/applied/dismissed), unique per contact and campaign.
 
-Migration 009: `replies` (mailbox, Graph message id, contact, campaign, subject, body, stage, note, next_followup), `reply_stage_history`, `mailbox_sync` (last fetch per mailbox).
+Migration 009: `replies` (mailbox, Graph message id, contact, campaign, subject, body, stage, note, next_followup), `reply_stage_history`, `mailbox_sync` (last fetch per mailbox). Reply stages are a subset of the planned sales stages (ADR-007).
+
+Migration 010: `campaign_recipients.status` gains `unknown`; new table `campaign_links` (campaign, contact, token, created_at, expires_at; unique per campaign and contact).
+
+## Mailboxes (implemented)
+
+`mailboxes`: display name, email, `is_active`. Rows are created by an administrator under Settings → Mailboxes; no addresses are seeded by migrations.

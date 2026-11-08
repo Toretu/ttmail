@@ -6,9 +6,14 @@ namespace Mailings\Mail;
 use Mailings\Config;
 use Mailings\Database;
 
-/** Per-contact unsubscribe tokens. A token only allows unsubscribing that one contact. */
+/**
+ * Per-contact unsubscribe tokens. A token only allows unsubscribing that one contact;
+ * the personal details page uses its own expiring tokens (see DetailsLink).
+ */
 final class Unsubscribe
 {
+    public const SAMPLE_TOKEN = '00000000000000000000000000000000';
+
     public static function tokenFor(int $contactId): string
     {
         $pdo = Database::connect();

@@ -11,10 +11,11 @@ Sending is a deliberate, controlled process. Nothing is sent when you add recipi
 ## What happens next
 A background worker (`bin/send-queue.php`, started every minute by cron) sends about **10 mails per minute** (`MAIL_RATE_PER_MINUTE`, 1–30), one message per contact, spaced evenly. 300 recipients take about 30 minutes. The Sending panel updates itself every 10 seconds. You can close the page.
 
-- Each recipient is **claimed before sending** and never sent twice. If the worker is killed mid-send, that recipient is marked failed with "Outcome unknown, check Sent Items" rather than being resent automatically.
+- Each recipient is **claimed before sending** and never sent twice. If the worker is killed mid-send, that recipient is marked **outcome unknown** ("check Sent Items") rather than being resent. Unknown entries are never queued again automatically; if Sent Items shows the mail was not sent, add the contact to the campaign again by hand.
 - Before each mail the contact is **checked again**: someone who unsubscribed after approval is skipped, as are companies that became inactive or do-not-contact.
 - The message and recipient list are **locked** from approval until the campaign is done. After it is done you may add new recipients; they must be approved again with their own count.
-- A campaign with sent mail cannot be deleted. Set it to closed to keep the history.
+- A campaign with sent mail cannot be deleted. Set it to closed to keep the history. Likewise a contact that was sent mail (or unsubscribed) cannot be deleted; set the company inactive or the contact withdrawn instead.
+- A run stops claiming new recipients after about 55 seconds so it is always finished before the next cron tick, even when Microsoft answers slowly.
 
 ## Automatic pausing
 The campaign pauses (waiting recipients stay waiting, nothing is lost) when:
@@ -24,7 +25,7 @@ The campaign pauses (waiting recipients stay waiting, nothing is lost) when:
 
 The reason is shown in red on the panel. Fix the cause, then press **Resume**. Pause by hand with **Pause** at any time.
 
-A single message refused for its own reason (for example an address that does not exist) is marked **failed** with Microsoft's reason, and sending continues. **Queue failed again** puts failed recipients back in the queue. Check Sent Items first for entries marked "Outcome unknown".
+A single message refused for its own reason (for example an address that does not exist) is marked **failed** with Microsoft's reason, and sending continues. **Queue failed again** puts failed recipients back in the queue; entries marked **unknown** are left alone (see above).
 
 ## Cron setup (server)
 Run as the same user as PHP/the web app can read `.env` (it needs database and Graph access), once a minute:
@@ -42,7 +43,9 @@ With `APP_ENV=development` and `MAIL_DRY_RUN=1`, mail is only logged ("DRY RUN: 
 | `GET /api/campaigns/{id}/send` | State, counts, failures and skips |
 | `POST …/send/approve` | Body `{"confirm_count": N}`; needs a current test mail |
 | `POST …/send/pause`, `…/send/resume` | Stop and continue |
-| `POST …/send/retry-failed` | Queue failed recipients again |
+| `POST …/send/retry-failed` | Queue failed recipients again (not those with unknown outcome) |
+
+Recipient statuses: `pending`, `sending` (claimed), `sent`, `failed`, `skipped` (excluded at send time), `unknown` (interrupted; outcome not known).
 
 ## Before the first real campaign
 - Settings → Test connection is green and `Mail.Send` is granted (docs/office365-setup.md).

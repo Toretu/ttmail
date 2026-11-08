@@ -17,6 +17,8 @@ use PDO;
 final class Queue
 {
     private const MAX_CONSECUTIVE_FAILURES = 3;
+    /** A run stops claiming new recipients after this many seconds so it is finished before the next cron tick. */
+    private const RUN_SECONDS = 55;
     /** Statuses meaning "stop, the problem is not this recipient": auth, permission, throttling, service trouble, unreachable. */
     private const PAUSING_STATUSES = [0, 401, 403, 429, 500, 502, 503, 504, 509];
 
@@ -44,9 +46,11 @@ final class Queue
     private function process(PDO $pdo): array
     {
         $result = ['sent' => 0, 'failed' => 0, 'skipped' => 0, 'paused' => 0];
+        $deadline = time() + self::RUN_SECONDS;
 
-        // A recipient left in 'sending' means the worker died mid-send; the outcome is unknown, so never retry silently.
-        $pdo->exec("UPDATE campaign_recipients SET status = 'failed', error = 'Outcome unknown (sending was interrupted). Check the mailbox Sent Items before retrying.'
+        // A recipient left in 'sending' means the worker died mid-send. The outcome is unknown, so it gets its own
+        // status that is never queued again automatically.
+        $pdo->exec("UPDATE campaign_recipients SET status = 'unknown', error = 'Outcome unknown (sending was interrupted). Check the mailbox Sent Items; add the contact again only if the mail was not sent.'
                     WHERE status = 'sending' AND claimed_at < (NOW() - INTERVAL 10 MINUTE)");
 
         $budget = self::rate();
@@ -70,7 +74,7 @@ final class Queue
             }
 
             $consecutive = 0;
-            while ($budget > 0) {
+            while ($budget > 0 && time() < $deadline) {
                 $recipient = $this->claim($pdo, $id);
                 if ($recipient === null) {
                     $left = $pdo->prepare("SELECT COUNT(*) FROM campaign_recipients WHERE campaign_id = ? AND status IN ('pending','sending')");
@@ -90,7 +94,7 @@ final class Queue
 
                 $budget--;
                 try {
-                    [$subject, $html] = Composer::build($campaign, $mailbox, (int) $recipient['contact_id']);
+                    [$subject, $html] = Composer::build($campaign, $mailbox, (int) $recipient['contact_id'], true);
                     Dispatch::send($mailbox['email'], $recipient['email'], $subject, $html);
                     $this->finish($pdo, (int) $recipient['rid'], 'sent', null);
                     $result['sent']++;
@@ -117,10 +121,14 @@ final class Queue
                     break;
                 }
                 if ($budget > 0 && $delay > 0) {
-                    sleep($delay);
+                    if (time() + $delay >= $deadline) {
+                        $budget = 0; // keep the spacing; the rest is sent by the next run
+                    } else {
+                        sleep($delay);
+                    }
                 }
             }
-            if ($budget <= 0) {
+            if ($budget <= 0 || time() >= $deadline) {
                 break;
             }
         }

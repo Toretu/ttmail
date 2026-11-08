@@ -13,15 +13,18 @@ final class Composer
     /**
      * @param array<string,mixed> $campaign
      * @param array<string,mixed> $mailbox
-     * @return array{string,string} subject, html. Without a contact id, sample data and an inactive link are used.
+     * @param bool $live true only when the message is actually sent to the contact: then personal tokens are
+     *                   created and real links used. Preview and test mail get the contact's data (if given) but inactive links.
+     * @return array{string,string} subject, html. Without a contact id, sample data is used.
      */
-    public static function build(array $campaign, array $mailbox, ?int $contactId): array
+    public static function build(array $campaign, array $mailbox, ?int $contactId, bool $live = false): array
     {
-        $vars = ['first_name' => 'Kari', 'last_name' => 'Nordmann', 'full_name' => 'Kari Nordmann', 'company' => 'Eksempel AS', 'campaign' => (string) $campaign['name']];
-        $vars['products'] = self::products((int) $campaign['id']);
+        $campaignId = (int) $campaign['id'];
         $base = rtrim(Config::get('APP_URL', ''), '/');
-        $vars['details_link'] = $base . '/reply?t=' . str_repeat('0', 32) . '&c=' . (int) $campaign['id'];
-        $link = rtrim(Config::get('APP_URL', ''), '/') . '/unsubscribe?t=' . str_repeat('0', 32);
+        $vars = ['first_name' => 'Kari', 'last_name' => 'Nordmann', 'full_name' => 'Kari Nordmann', 'company' => 'Eksempel AS', 'campaign' => (string) $campaign['name']];
+        $vars['products'] = self::products($campaignId);
+        $vars['details_link'] = $base . '/reply?t=' . DetailsLink::SAMPLE_TOKEN . '&c=' . $campaignId;
+        $link = $base . '/unsubscribe?t=' . Unsubscribe::SAMPLE_TOKEN;
         if ($contactId !== null) {
             $stmt = Database::connect()->prepare('SELECT c.id, c.first_name, c.last_name, co.name AS company FROM contacts c JOIN companies co ON co.id = c.company_id WHERE c.id = ?');
             $stmt->execute([$contactId]);
@@ -33,9 +36,12 @@ final class Composer
                 'first_name' => $c['first_name'], 'last_name' => $c['last_name'],
                 'full_name' => trim($c['first_name'] . ' ' . $c['last_name']),
                 'company' => $c['company'], 'campaign' => (string) $campaign['name'],
+                'products' => $vars['products'], 'details_link' => $vars['details_link'],
             ];
-            $vars['details_link'] = $base . '/reply?t=' . Unsubscribe::tokenFor((int) $c['id']) . '&c=' . (int) $campaign['id'];
-            $link = Unsubscribe::url(Unsubscribe::tokenFor((int) $c['id']));
+            if ($live) {
+                $vars['details_link'] = DetailsLink::url(DetailsLink::tokenFor($campaignId, (int) $c['id']), $campaignId);
+                $link = Unsubscribe::url(Unsubscribe::tokenFor((int) $c['id']));
+            }
         }
         return [
             Template::subject((string) $campaign['subject'], $vars),

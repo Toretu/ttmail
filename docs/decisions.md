@@ -51,3 +51,39 @@
 **Decision:** A task cannot be marked complete until affected setup, configuration, security, testing, and project-plan documentation is updated.
 
 **Reason:** Volunteers must be able to operate and maintain the solution after implementation.
+
+## ADR-007: Reply follow-up stages are a subset until opportunities exist
+
+**Status:** Proposed – needs project owner approval
+
+**Decision:** The Replies pane uses seven follow-up stages (`new`, `interested`, `needs_call`, `quote_sent`, `won`, `declined`, `done`) for mail that has come in. The fifteen sales stages required by the project instructions (Not contacted … Do not contact) describe the *recipient/opportunity* lifecycle; the mail-related ones are already represented by recipient status (`pending`/`sent`/`failed`/`skipped`/`unknown`) and unsubscribe status (`Do not contact`). The remaining sales stages will be introduced with the Opportunities and payments phase as the opportunity stage, and the reply stages will map onto them (`interested` → Interested, `needs_call` → Needs information / Follow-up required, `quote_sent` → Proposal sent, `won` → Confirmed, `declined` → Not interested).
+
+**Reason:** Replies needed a small, obvious set of stages for volunteers. Using the full list on replies would mix mail status with sales status.
+
+**Consequences:** Until the owner approves this ADR (or asks for the full list on replies), the reply stages are a known deviation from the instructions. Changing them later requires a migration of `replies.stage` and `reply_stage_history`.
+
+## ADR-008: Records with history are deactivated, never deleted
+
+**Status:** Accepted
+
+**Decision:** A contact that has unsubscribed, or that has been sent campaign mail, cannot be deleted (nor can its company). Users set the contact to withdrawn or the company to inactive / do not contact instead. Plain contacts with no history can still be deleted.
+
+**Reason:** The unsubscribe record and the send history must survive a re-import of the same spreadsheet; otherwise an address that asked not to be contacted could be mailed again, and "who was sent what" would be lost.
+
+**Consequences:** Deletion for data-protection requests must be handled as a documented manual procedure (anonymise the contact fields, keep the suppression) rather than the Delete button. This is listed as an open item in the project plan.
+
+## ADR-009: Personal details links use their own expiring tokens
+
+**Status:** Accepted
+
+**Decision:** The `{{details_link}}` page is opened with a token per campaign and contact (`campaign_links`, default validity `REPLY_LINK_DAYS` = 90 days). The unsubscribe token (`contact_tokens`) only unsubscribes and never opens the details page. Preview and test mail contain inactive sample tokens only.
+
+**Reason:** The details page shows and accepts organisation number, billing address and phone. A forwarded unsubscribe link must not expose that, and the exposure window should be limited.
+
+## ADR-010: Products and prices are administrator settings
+
+**Status:** Accepted
+
+**Decision:** Creating and changing campaign products (name, price, capacity) requires the admin role. Registering, changing and cancelling sales against products remains editor work.
+
+**Reason:** The security documentation and the critical test list already assigned products and prices to administrators; the code allowed editors. Prices are a financial setting, not day-to-day campaign work.

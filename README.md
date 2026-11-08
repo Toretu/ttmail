@@ -30,16 +30,22 @@ An interactive, no-build browser mockup is available in [mockup/](mockup/). Open
 ## Documentation
 
 - [Copilot instructions](copilot-instructions.md)
-- [Architecture](docs/architecture.md)
-- [Data model](docs/data-model.md)
-- [Security](docs/security.md)
-- [Configuration](docs/configuration.md)
-- [Deployment](docs/deployment.md)
-- [Testing](docs/testing.md)
-- [Operations](docs/operations.md)
-- [Troubleshooting](docs/troubleshooting.md)
-- [Decisions](docs/decisions.md)
-- [Change log](docs/change-log.md)
+- [Project plan](docs/project-plan.md) and [change log](docs/change-log.md)
+- [Architecture](docs/architecture.md), [data model](docs/data-model.md), [decisions](docs/decisions.md)
+- [Setup guide](docs/setup-guide.md), [Microsoft 365 setup](docs/office365-setup.md), [configuration](docs/configuration.md), [deployment](docs/deployment.md), [operations](docs/operations.md), [troubleshooting](docs/troubleshooting.md)
+- [Security](docs/security.md) and [testing](docs/testing.md)
+- Features: [records](docs/records.md), [import](docs/import.md), [groups and recipients](docs/groups-and-recipients.md), [campaign products](docs/campaign-products.md), [campaign message](docs/campaign-message.md), [sending](docs/sending.md), [replies](docs/replies.md)
+
+## Development quick start
+
+```
+bash bin/init-env.sh            # creates .env with generated database passwords
+docker compose up -d --build    # web on http://127.0.0.1:8081
+docker compose exec -T web php bin/migrate.php
+bash tests/smoke.sh             # needs MAIL_DRY_RUN=1 in .env; works without host PHP
+```
+
+CI (`.github/workflows/ci.yml`) runs the same lint, stack, migrations and smoke test on every push.
 
 ## Signing in
-Open `http://127.0.0.1:8081/login.html`. Locally, with `APP_ENV=development` and `AUTH_DEV_LOGIN=1`, use the development login. With Microsoft 365, follow `docs/office365-setup.md` (step 3b) and set `AUTH_BOOTSTRAP_ADMIN`. Manage users under Settings → Users. The mockup is served at `/app/`.
+Open `http://127.0.0.1:8081/login.html`. Locally, with `APP_ENV=development` and `AUTH_DEV_LOGIN=1`, use the development login. With Microsoft 365, follow `docs/office365-setup.md` (step 3b) and set `AUTH_BOOTSTRAP_ADMIN`. Manage users under Settings → Users and the approved mailboxes under Settings → Mailboxes. The mockup is served at `/app/` by the Docker setup only.

@@ -31,7 +31,7 @@ final class CampaignController
         }
 
         $pdo = Database::connect();
-        $mailed = $pdo->prepare("SELECT COUNT(*) FROM campaign_recipients WHERE campaign_id = ? AND status IN ('sending','sent','failed')");
+        $mailed = $pdo->prepare("SELECT COUNT(*) FROM campaign_recipients WHERE campaign_id = ? AND status IN ('sending','sent','failed','unknown')");
         $mailed->execute([$id]);
         if ($campaign['send_state'] === 'sending' || (int) $mailed->fetchColumn() > 0) {
             throw new HttpException(409, 'Mail has been sent for this campaign, so it cannot be deleted. Close it instead (status closed) to keep the history.');
